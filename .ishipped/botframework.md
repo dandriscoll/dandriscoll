@@ -1,7 +1,7 @@
 ---
 title: Micrsoft Bot Framework and Azure Bot Service
 summary: Microsoft's conversational AI platform for the dawn of the modern NLP era.
-hero: bf.png
+hero: botframework.png
 shipped: 2016-03-30
 version: v1.0
 collaborators: tomlm, lilich, stevenic, willportnoy
