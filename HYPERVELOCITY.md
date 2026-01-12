@@ -66,5 +66,6 @@ Projects launched:
 - [Devlogs](https://ishipped.io/card/dandriscoll/devlogs) - Log traces so an LLM can read them
 - [Markback](https://markback.org) - Markdown-compatible feedback for labeling items on disk (Python/JS support)
 - [todoosy.org](https://todoosy.org) - Markdown to-do list and web editor (Python/JS libs)
+- [skylineplot.com](https://skylineplot.com) - 3D viewer for analyzing formation flying logs
 - [iShipped.io](https://ishipped.io) - Show off your projects with a Markdown card committed to your repo
 - Two big unpublished projects not yet ready to see the light of day
