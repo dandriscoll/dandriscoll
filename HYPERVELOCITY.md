@@ -61,11 +61,13 @@ Here's the workflow I used to achieve 300 commits:
 - In parallel, let up CI/CD. If you're using Jenkins, set up devlogs on that as well.
 - Buy domains as required 😉
 - Iterate until you're done. Once I got the workflow going, most of my time was spent sorting out CI/CD.
+- Once I got the flow going, I would fire up ChatGPT in audio mode while driving to/from the grocery store and would have it help me craft a prompt for the next major piece of code I'd build. When I get home, I copy/paste it in the flow here and off it goes.
 
 Projects launched:
 - [Devlogs](https://ishipped.io/card/dandriscoll/devlogs) - Log traces so an LLM can read them
 - [Markback](https://markback.org) - Markdown-compatible feedback for labeling items on disk (Python/JS support)
 - [todoosy.org](https://todoosy.org) - Markdown to-do list and web editor (Python/JS libs)
 - [skylineplot.com](https://skylineplot.com) - 3D viewer for analyzing formation flying logs
+- [navaid-api](https://github.com/dandriscoll/navaid-api) - NAVAID reverse lookup API
 - [iShipped.io](https://ishipped.io) - Show off your projects with a Markdown card committed to your repo
 - Two big unpublished projects not yet ready to see the light of day
