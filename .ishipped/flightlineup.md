@@ -10,6 +10,8 @@ links:
   - label: "Try It"
     url: "https://flightlineup.com"
     primary: true
+collaborators:
+  - jer03
 ---
 
 ## What is it?
