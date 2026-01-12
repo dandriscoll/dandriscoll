@@ -63,8 +63,8 @@ Here's the workflow I used to achieve 300 commits:
 - Iterate until you're done. Once I got the workflow going, most of my time was spent sorting out CI/CD.
 
 Projects launched:
-- (Devlogs)[https://ishipped.io/card/dandriscoll/devlogs] - Log traces so an LLM can read them
-- (Markback)[https://markback.org] - Markdown-compatible feedback for labeling items on disk (Python/JS support)
-- (todoosy.org)[https://todoosy.org] - Markdown to-do list and web editor (Python/JS libs)
-- (iShipped.io)[https://ishipped.io] - Show off your projects with a Markdown card committed to your repo
+- [Devlogs](https://ishipped.io/card/dandriscoll/devlogs) - Log traces so an LLM can read them
+- [Markback](https://markback.org) - Markdown-compatible feedback for labeling items on disk (Python/JS support)
+- [todoosy.org](https://todoosy.org) - Markdown to-do list and web editor (Python/JS libs)
+- [iShipped.io](https://ishipped.io) - Show off your projects with a Markdown card committed to your repo
 - Two big unpublished projects not yet ready to see the light of day
