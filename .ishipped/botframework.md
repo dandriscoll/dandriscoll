@@ -5,8 +5,14 @@ theme: ruby
 hero: botframework.png
 shipped: 2016-03-30
 version: v1.0
-collaborators: tomlm, lilich, stevenic, willportnoy
-repo: https://github.com/microsoft/botframework-sdk
+collaborators:
+  - tomlm
+  - lilich
+  - stevenic
+  - willportnoy
+repo:
+  owner: microsoft
+  name: botframework-sdk
 author:
   name: Dan Driscoll
   github: dandriscoll
