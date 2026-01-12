@@ -17,6 +17,7 @@ Three observations from watching this unfold:
 **I had to stay out of the way**. My instinct was to jump in and fix problems when I saw the agent struggling. I had to fight this urge and get the feedback wired up instead. Once I did, agent learned faster from its own failures than from my corrections.
 **The constraint was verification, not intelligence**. When the specs and test suite were present, velocity was good. When they were strong, things really took off. The parts of the system that weren't closed-loop -- like deployment -- got left in the dust. The ceiling wasn't the model's capability. It was whether the system could tell the model it was wrong.
 
+
 ## Hypervelocity principles
 
 ### Closed-loop development always wins
@@ -25,11 +26,12 @@ Software systems that continuously execute, measure, and correct themselves thro
 ### Self-directed iteration
 A development agent must be able to complete the full iteration cycle -- change, observe, correct -- without waiting for human handoffs. This means access to edit code, run services, run tests, and any other tools (whatever is in the loop).
 
-## Total machine observability
+### Total machine observability
 A development agent must observe all consequences of its actions: test results, logs, metrics, and runtime behavior. It must access them in a way that make it straightforward to find the errors.
 
-## Verification defines correctness
+### Verification defines correctness
 Correctness is defined by automated verification: tests, checks, and even abstract written tests that can be evaluated autonomously by an agent. Anything covered by a test will be driven to convergence. Anything untested is left to chance.
+
 
 ## What it looks like in practice
 
