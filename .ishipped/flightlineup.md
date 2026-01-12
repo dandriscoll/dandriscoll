@@ -10,6 +10,10 @@ links:
   - label: "Try It"
     url: "https://flightlineup.com"
     primary: true
+author:
+  name: Dan Driscoll
+  github: dandriscoll
+  url: https://github.com/dandriscoll
 collaborators:
   - jer03
 ---
