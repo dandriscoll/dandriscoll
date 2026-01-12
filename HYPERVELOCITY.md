@@ -47,3 +47,22 @@ Humans must resist the urge to fix point issues and must demand systemic, automa
 
 ### Model quality is secondary
 A mediocre model in a closed loop outperforms a strong model without feedback. Feedback is more important than initial intelligence.
+
+### 300 commits in practice
+Here's the workflow I used to achieve 300 commits:
+- I started with Github Copilot and ran out of tokens pretty quickly. Switched to Claude Code, which helped me really cement the pattern. When I ran out of Claude tokens, I added Codex. Opus 4.5 is the best model to use but once you get the closed loop in place, the other models produced good results too.
+- I did both new and old codebases. For new codebases, start in a plan mode. For old codebases, the agent reads the repo and generates a spec. This gets moved to a clean space (new repo or wipe out old code) and is the start for new code.
+- 90% of the projects started in Python but I added JS and C# and Java later on. The pattern applies to them all. I'll use Python as the canonical example for the rest of the paper.
+- Start by adding [devlogs](https://github.com/dandriscoll/devlogs) to log all traces to a local OpenSearch index, and initializing the MCP server so the agent can read the logs.
+- Where appropriate, the agent create a CLI tool that represent the core functionality. This becomes one of the core components in executing the system. Have the agent build lots of tests.
+- Scaffold out the main implementation. Add specs and tests.
+- In parallel, let up CI/CD. If you're using Jenkins, set up devlogs on that as well.
+- Buy domains as required 😉
+- Iterate until you're done. Once I got the workflow going, most of my time was spent sorting out CI/CD.
+
+Projects launched:
+- (Devlogs)[https://ishipped.io/card/dandriscoll/devlogs] - Log traces so an LLM can read them
+- (Markback)[https://markback.org] - Markdown-compatible feedback for labeling items on disk (Python/JS support)
+- (todoosy.org)[https://todoosy.org] - Markdown to-do list and web editor (Python/JS libs)
+- (iShipped.io)[https://ishipped.io] - Show off your projects with a Markdown card committed to your repo
+- Two big unpublished projects not yet ready to see the light of day
