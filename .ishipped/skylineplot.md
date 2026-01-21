@@ -1,14 +1,12 @@
 ---
 title: "Skyline Plot"
 summary: "Visualize and analyze multiple flight tracks in 3D"
-shipped: 2024-12-01
+shipped: 2025-12-19
 tags: [aviation, visualization, cesium, react]
 links:
   - label: "Try It"
     url: "https://skylineplot.com"
     primary: true
-  - label: "GitHub"
-    url: "https://github.com/dandriscoll/skyline"
 icon: "./skylineplot_icon.png"
 images:
   - url: "./skylineplot_screenshot.png"
@@ -17,7 +15,7 @@ images:
 
 ## What is it?
 
-Skyline Plot is a privacy-focused web app for visualizing flight track data. Load KML files and watch multiple aircraft move in synchronized 3D. All processing happens in your browser—no data leaves your machine unless you choose to share.
+Skyline Plot is a web app for visualizing formation flight track data. Load KML files and watch multiple aircraft move in synchronized 3D. All processing happens in your browser—no data leaves your machine unless you choose to share.
 
 ## Key Features
 
