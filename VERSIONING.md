@@ -20,11 +20,20 @@ Versions follow the pattern:
 
 **With commit (optional):** `main-20260125-143022-a1b2c3d`
 
+### When to Include Commit Hash
+
+The commit hash is optional and typically omitted for simplicity. Include it when:
+- Your CI/CD pipeline needs to link builds to exact commits for audit trails
+- You deploy multiple builds from the same branch within the same second (rare)
+- Your debugging workflow relies on commit-level traceability
+
+For local development, the branch and timestamp are sufficient.
+
 ### Why This Format?
 
 - **Branch**: Identifies source branch for traceability
 - **Timestamp**: Provides chronological ordering and human-readable build time
-- **Commit** (optional): Links to exact source code state for debugging and audits; include when additional traceability is needed
+- **Commit** (optional): Links to exact source code state; typically only needed in CI/CD pipelines
 
 This format is preferred over pure [Semantic Versioning](https://semver.org/) for internal/continuous deployment scenarios because:
 - No manual version bumping required
@@ -93,6 +102,8 @@ CI/CD systems should set these environment variables:
 
 Each example separates the **version loader** (minimal, lives in main code) from the **git fallback script** (dedicated file, only needed for local dev).
 
+**File placement:** The paths shown (e.g., `src/version.js`) are examples. Place the version loader in your project's existing utility or lib directory to match your conventions (e.g., `src/lib/version.ts`, `pkg/version/version.go`).
+
 ### Python
 
 **version.py** (version loader):
@@ -155,9 +166,15 @@ BUILD_VERSION=$(python scripts/git_version.py) python app.py
 export const VERSION = process.env.BUILD_VERSION || 'development';
 ```
 
+> **Next.js / Browser apps:** `process.env` is server-side only by default. To expose the version client-side, use framework-specific configuration:
+> - Next.js: Use `NEXT_PUBLIC_BUILD_VERSION` or expose via `next.config.js`
+> - Vite: Use `VITE_BUILD_VERSION`
+> - Create React App: Use `REACT_APP_BUILD_VERSION`
+
 **scripts/git-version.js** (fallback script):
 ```javascript
 #!/usr/bin/env node
+// Uses CommonJS (require) for Node.js script compatibility across project types
 const { execSync } = require('child_process');
 
 function exec(cmd) {

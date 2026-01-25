@@ -17,17 +17,21 @@ Then follow these tasks:
 
 1. **Detect the project type** (Python, JavaScript/TypeScript, C#/.NET, Go, or other) by examining the codebase.
 
-2. **Create a version loader module** following the language examples in the spec. This should be minimal:
+2. **Create a version loader module** following the language examples in the spec:
+   - Place it in the project's existing utility/lib directory to match conventions
    - Read from the `BUILD_VERSION` environment variable
    - Default to `"development"` if not set
    - No git logic in this file
+   - For frontend frameworks (Next.js, Vite, etc.), check if the version needs to be exposed client-side
 
 3. **Ask me:** Do you want fallback logic that calculates the version from git when `BUILD_VERSION` is not set?
 
    - If yes: Create a **separate dedicated code** following the spec examples, and update build/run scripts (package.json, Makefile, etc.) to include a convenience command for local dev.
    - If no: Skip the fallback code.
 
-4. **Verify** the setup works by showing me how to test it locally.
+4. **Verify** the setup works:
+   - Show me how to test it locally
+   - Confirm the version is accessible where it's needed (API routes, UI, logs, etc.)
 
 ### Constraints
 
