@@ -24,8 +24,8 @@ Then follow these tasks:
 
 3. **Ask me:** Do you want fallback logic that calculates the version from git when `BUILD_VERSION` is not set?
 
-   - If yes: Create a **separate dedicated script** following the spec examples, and update build/run scripts (package.json, Makefile, etc.) to include a convenience command for local dev.
-   - If no: Skip the fallback script.
+   - If yes: Create a **separate dedicated code** following the spec examples, and update build/run scripts (package.json, Makefile, etc.) to include a convenience command for local dev.
+   - If no: Skip the fallback code.
 
 4. **Verify** the setup works by showing me how to test it locally.
 
