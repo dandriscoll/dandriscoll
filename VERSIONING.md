@@ -62,8 +62,17 @@ Versions are generated during the build/deploy process:
 When the version is not injected by CI/CD, calculate it from git:
 
 ```bash
-# Get sanitized branch name
-BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's/[^a-zA-Z0-9]/-/g')
+# Get sanitized branch name (with detached HEAD fallback)
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" = "HEAD" ]; then
+    # Detached HEAD: try CI env vars, then git name-rev
+    BRANCH="${GITHUB_REF_NAME:-${CI_COMMIT_REF_NAME:-${BUILD_SOURCEBRANCH:-}}}"
+    if [ -z "$BRANCH" ]; then
+        BRANCH=$(git name-rev --name-only HEAD 2>/dev/null | sed 's|remotes/origin/||')
+    fi
+    [ -z "$BRANCH" ] && BRANCH="detached"
+fi
+BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g')
 
 # Get UTC timestamp
 TZ=UTC TIMESTAMP=$(git show -s --format=%cd --date=format:'%Y%m%d-%H%M%S' HEAD)
@@ -75,6 +84,8 @@ VERSION="${BRANCH}-${TIMESTAMP}"
 COMMIT=$(git rev-parse --short=7 HEAD)
 VERSION="${BRANCH}-${TIMESTAMP}-${COMMIT}"
 ```
+
+> **Why "HEAD" appears:** CI/CD systems often checkout a specific commit (detached HEAD) rather than a branch. The script above checks common CI environment variables (`GITHUB_REF_NAME`, `CI_COMMIT_REF_NAME`, `BUILD_SOURCEBRANCH`) before falling back to `git name-rev`.
 
 ### Rule 4: Dirty Working Directory
 
@@ -116,18 +127,46 @@ __version__ = os.environ.get("BUILD_VERSION", "development")
 **scripts/git_version.py** (fallback script):
 ```python
 #!/usr/bin/env python3
-"""Generate version from git and set BUILD_VERSION environment variable."""
+"""Generate version from git. Handles detached HEAD in CI/CD environments."""
+import os
+import re
 import subprocess
-import sys
 
-def get_version():
+def get_branch():
+    """Get branch name, handling detached HEAD state."""
     try:
         branch = subprocess.check_output(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
             stderr=subprocess.DEVNULL,
             text=True
-        ).strip().replace("/", "-")
+        ).strip()
 
+        if branch == "HEAD":
+            # Detached HEAD: try CI env vars first
+            for env_var in ["GITHUB_REF_NAME", "CI_COMMIT_REF_NAME", "BUILD_SOURCEBRANCH"]:
+                if os.environ.get(env_var):
+                    branch = os.environ[env_var]
+                    break
+            else:
+                # Fall back to git name-rev
+                try:
+                    branch = subprocess.check_output(
+                        ["git", "name-rev", "--name-only", "HEAD"],
+                        stderr=subprocess.DEVNULL,
+                        text=True
+                    ).strip().replace("remotes/origin/", "")
+                except subprocess.CalledProcessError:
+                    branch = "detached"
+
+        # Sanitize: keep only alphanumeric and hyphens
+        return re.sub(r"[^a-zA-Z0-9]", "-", branch)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "unknown"
+
+def get_version():
+    branch = get_branch()
+
+    try:
         timestamp = subprocess.check_output(
             ["git", "show", "-s", "--format=%cd", "--date=format:%Y%m%d-%H%M%S", "HEAD"],
             stderr=subprocess.DEVNULL,
@@ -185,7 +224,23 @@ function exec(cmd) {
   }
 }
 
-const branch = exec('git rev-parse --abbrev-ref HEAD')?.replace(/\//g, '-') || 'unknown';
+function getBranch() {
+  let branch = exec('git rev-parse --abbrev-ref HEAD');
+
+  if (branch === 'HEAD') {
+    // Detached HEAD: try CI env vars first
+    branch = process.env.GITHUB_REF_NAME
+          || process.env.CI_COMMIT_REF_NAME
+          || process.env.BUILD_SOURCEBRANCH
+          || exec('git name-rev --name-only HEAD')?.replace('remotes/origin/', '')
+          || 'detached';
+  }
+
+  // Sanitize: keep only alphanumeric and hyphens
+  return (branch || 'unknown').replace(/[^a-zA-Z0-9]/g, '-');
+}
+
+const branch = getBranch();
 const timestamp = exec('git show -s --format=%cd --date=format:%Y%m%d-%H%M%S HEAD') || 'unknown';
 const isDirty = exec('git diff --quiet HEAD; echo $?') === '1';
 
@@ -219,7 +274,15 @@ public static class Version
 **scripts/git-version.sh** (fallback script):
 ```bash
 #!/bin/bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's/[^a-zA-Z0-9]/-/g')
+# Get branch name, handling detached HEAD state
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" = "HEAD" ]; then
+    BRANCH="${GITHUB_REF_NAME:-${CI_COMMIT_REF_NAME:-${BUILD_SOURCEBRANCH:-}}}"
+    [ -z "$BRANCH" ] && BRANCH=$(git name-rev --name-only HEAD 2>/dev/null | sed 's|remotes/origin/||')
+    [ -z "$BRANCH" ] && BRANCH="detached"
+fi
+BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g')
+
 TIMESTAMP=$(TZ=UTC git show -s --format=%cd --date=format:'%Y%m%d-%H%M%S' HEAD)
 
 if ! git diff --quiet HEAD 2>/dev/null; then
@@ -257,7 +320,15 @@ func Get() string {
 **scripts/git-version.sh** (fallback script):
 ```bash
 #!/bin/bash
-BRANCH=$(git rev-parse --abbrev-ref HEAD | sed 's/[^a-zA-Z0-9]/-/g')
+# Get branch name, handling detached HEAD state
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" = "HEAD" ]; then
+    BRANCH="${GITHUB_REF_NAME:-${CI_COMMIT_REF_NAME:-${BUILD_SOURCEBRANCH:-}}}"
+    [ -z "$BRANCH" ] && BRANCH=$(git name-rev --name-only HEAD 2>/dev/null | sed 's|remotes/origin/||')
+    [ -z "$BRANCH" ] && BRANCH="detached"
+fi
+BRANCH=$(echo "$BRANCH" | sed 's/[^a-zA-Z0-9]/-/g')
+
 TIMESTAMP=$(TZ=UTC git show -s --format=%cd --date=format:'%Y%m%d-%H%M%S' HEAD)
 
 if ! git diff --quiet HEAD 2>/dev/null; then

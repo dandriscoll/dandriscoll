@@ -39,3 +39,4 @@ Then follow these tasks:
 - Keep the version loader minimal - no git commands or subprocess calls
 - Git fallback logic (if requested) must live in a dedicated script file, not in the main codebase
 - Follow existing code style and conventions in the project
+
