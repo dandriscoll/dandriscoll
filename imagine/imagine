@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+IMAGINE_FILE="${IMAGINE_FILE:-$HOME/.imagine}"
+
+cmd_install() {
+    local bin_dir="$HOME/.local/bin"
+    mkdir -p "$bin_dir"
+    cp "$0" "$bin_dir/imagine"
+    chmod +x "$bin_dir/imagine"
+
+    # Set up .imagine file
+    touch "$IMAGINE_FILE"
+
+    # Attach login message to shell profile
+    local login_line='command -v imagine >/dev/null 2>&1 && echo "imagine ls"'
+    for rc in "$HOME/.bashrc" "$HOME/.zshrc"; do
+        if [ -f "$rc" ]; then
+            if ! grep -qF "imagine ls" "$rc"; then
+                printf '\n# imagine\n%s\n' "$login_line" >> "$rc"
+            fi
+        fi
+    done
+
+    echo "Installed imagine to $bin_dir/imagine"
+    echo "Created $IMAGINE_FILE"
+    echo "Added login hook to shell profile"
+}
+
+cmd_ls() {
+    if [ -f "$IMAGINE_FILE" ]; then
+        cat "$IMAGINE_FILE"
+    fi
+}
+
+cmd_help() {
+    cat <<'HELP'
+Usage: imagine [command] [dir] <thought>...
+
+Commands:
+  install   Install imagine to ~/.local/bin and set up shell login hook
+  ls        Print all recorded thoughts
+  help      Show this help message
+
+Recording thoughts:
+  imagine <thought>...          Record a thought tagged with the current directory
+  imagine <dir> <thought>...    Record a thought tagged with the given directory (resolved)
+
+Environment:
+  IMAGINE_FILE    Path to the imagine file (default: ~/.imagine)
+                  Export this variable to store thoughts in a different location.
+                  Example: export IMAGINE_FILE=~/projects/.imagine
+HELP
+}
+
+case "${1:-}" in
+    install)
+        cmd_install
+        ;;
+    ls)
+        cmd_ls
+        ;;
+    help|-h|--help)
+        cmd_help
+        ;;
+    *)
+        # Everything on the CLI is a thought, optionally prefixed by a directory
+        args=("$@")
+        if [ ${#args[@]} -eq 0 ]; then
+            echo "Usage: imagine [install|ls|[dir] <thought>...]"
+            exit 1
+        fi
+
+        dir="$(pwd)"
+        first="${args[0]}"
+
+        if [ -d "$first" ]; then
+            dir="$(cd "$first" && pwd -P)"
+            args=("${args[@]:1}")
+        fi
+
+        thought="${args[*]}"
+        echo "$dir $thought" >> "$IMAGINE_FILE"
+        ;;
+esac
