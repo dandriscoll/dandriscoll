@@ -22,8 +22,38 @@ cmd_install() {
         fi
     done
 
+    # Install bash completion
+    local comp_dir="$HOME/.local/share/bash-completion/completions"
+    mkdir -p "$comp_dir"
+    cat > "$comp_dir/imagine" <<'COMP'
+_imagine() {
+    local cur prev words cword
+    _init_completion || return
+
+    if [ "$cword" -eq 1 ]; then
+        COMPREPLY=($(compgen -W "install ls done help" -- "$cur"))
+        return
+    fi
+
+    if [ "${words[1]}" = "done" ]; then
+        local imagine_file="${IMAGINE_FILE:-$HOME/.imagine}"
+        [ -f "$imagine_file" ] || return
+        local dir
+        dir="$(pwd -P)"
+        # Extract thoughts for the current directory
+        local thoughts
+        thoughts=$(grep "^${dir} " "$imagine_file" | sed "s|^${dir} ||")
+        [ -z "$thoughts" ] && return
+        local IFS=$'\n'
+        COMPREPLY=($(compgen -W "$thoughts" -- "$cur"))
+    fi
+}
+complete -F _imagine imagine
+COMP
+
     echo "Installed imagine to $bin_dir/imagine"
     echo "Created $IMAGINE_FILE"
+    echo "Installed bash completion to $comp_dir/imagine"
     echo "Added login hook to shell profile"
 }
 
@@ -33,6 +63,48 @@ cmd_ls() {
     fi
 }
 
+cmd_done() {
+    local args=("$@")
+    if [ ${#args[@]} -eq 0 ]; then
+        echo "Usage: imagine done [dir] <substring>..."
+        exit 1
+    fi
+
+    local dir
+    dir="$(pwd -P)"
+    local first="${args[0]}"
+
+    if [ -d "$first" ]; then
+        dir="$(cd "$first" && pwd -P)"
+        args=("${args[@]:1}")
+    fi
+
+    local pattern="${args[*]}"
+    if [ -z "$pattern" ]; then
+        echo "Usage: imagine done [dir] <substring>..."
+        exit 1
+    fi
+
+    if [ ! -f "$IMAGINE_FILE" ]; then
+        echo "No imagine file found."
+        exit 1
+    fi
+
+    # Find first line matching dir + substring (case-insensitive)
+    local matched
+    matched=$(grep -i -n "^${dir} .*${pattern}" "$IMAGINE_FILE" | head -1)
+
+    if [ -z "$matched" ]; then
+        echo "No match for \"$pattern\" in $dir"
+        exit 1
+    fi
+
+    local lineno="${matched%%:*}"
+    local content="${matched#*:}"
+    sed -i "${lineno}d" "$IMAGINE_FILE"
+    echo "Done: $content"
+}
+
 cmd_help() {
     cat <<'HELP'
 Usage: imagine [command] [dir] <thought>...
@@ -40,11 +112,16 @@ Usage: imagine [command] [dir] <thought>...
 Commands:
   install   Install imagine to ~/.local/bin and set up shell login hook
   ls        Print all recorded thoughts
+  done      Mark a thought as done (removes it from the list)
   help      Show this help message
 
 Recording thoughts:
   imagine <thought>...          Record a thought tagged with the current directory
   imagine <dir> <thought>...    Record a thought tagged with the given directory (resolved)
+
+Completing thoughts:
+  imagine done <substring>...       Remove first thought matching substring in current dir
+  imagine done <dir> <substring>... Remove first thought matching substring in given dir
 
 Environment:
   IMAGINE_FILE    Path to the imagine file (default: ~/.imagine)
@@ -59,6 +136,10 @@ case "${1:-}" in
         ;;
     ls)
         cmd_ls
+        ;;
+    done)
+        shift
+        cmd_done "$@"
         ;;
     help|-h|--help)
         cmd_help
