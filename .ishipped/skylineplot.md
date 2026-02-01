@@ -3,6 +3,7 @@ title: "Skyline Plot"
 summary: "Visualize and analyze multiple flight tracks in 3D"
 shipped: 2025-12-19
 tags: [aviation, visualization, cesium, react]
+theme: ocean
 links:
   - label: "Try It"
     url: "https://skylineplot.com"

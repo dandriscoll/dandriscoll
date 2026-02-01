@@ -4,6 +4,7 @@ summary: "Drag-and-drop lineup builder for formation flights."
 shipped: 2024-08-03
 tags: [formation, lineup, aviation, react]
 icon: flightlineup.png
+theme: midnight
 images:
   - url: flightlineup_1.png
 links:
