@@ -343,6 +343,82 @@ Terraform's cloud providers (azurerm, aws, google) validate credentials at initi
 4. **Fast local iteration**: No Terraform init/plan cycle for local changes
 5. **Clear separation**: Infrastructure code vs application config
 
+## State Bootstrap Pattern (Local-Then-Migrate)
+
+When provisioning a new environment from scratch, Terraform faces a chicken-and-egg problem: the Azure Storage Account that will hold remote state doesn't exist yet, so you can't configure a remote backend. The solution is a two-step bootstrap:
+
+### Step 1: Provision with Local State
+
+Run Terraform **without** `backend.tf` so state is stored locally in `terraform.tfstate`. This creates all resources including the storage account and `tfstate` container that will eventually hold the remote state:
+
+```bash
+cd infra/terraform
+
+# No backend.tf exists yet — state stays local
+terraform init
+terraform apply -var-file=env/ppe.tfvars -var-file=env/ppe.secrets.tfvars
+
+# Note the outputs:
+# storage_account_name = "todoosystppe"
+# tfstate_container_name = "tfstate"
+```
+
+The key resources created during this step (`main.tf`):
+
+```hcl
+resource "azurerm_storage_account" "main" {
+  count = var.create_storage_account ? 1 : 0
+  name  = local.names.storage_account
+  # ...
+}
+
+resource "azurerm_storage_container" "tfstate" {
+  count              = var.create_storage_account ? 1 : 0
+  name               = "tfstate"
+  storage_account_id = azurerm_storage_account.main[0].id
+  # ...
+}
+```
+
+### Step 2: Migrate State to Azure Storage
+
+Now that the storage account exists, create `backend.tf` from the template and run `terraform init` to migrate:
+
+```bash
+cp backend.tf.example backend.tf
+# Edit backend.tf with values from Step 1 outputs:
+#   resource_group_name  = "todoosy-rg-ppe"
+#   storage_account_name = "todoosystppe"
+#   container_name       = "tfstate"
+#   key                  = "ppe.tfstate"
+
+terraform init
+# Terraform detects the backend change and prompts:
+#   "Do you want to copy existing state to the new backend?"
+# Answer "yes" to migrate local state into Azure Storage.
+```
+
+After migration, the local `terraform.tfstate` becomes a stub pointing to the remote backend. All subsequent `terraform plan/apply` operations read and write state from Azure Storage.
+
+### Why This Pattern?
+
+- **Self-contained**: Terraform creates its own state infrastructure — no manual Azure CLI prerequisites required.
+- **Idempotent**: If the storage account already exists (e.g., created by a teammate), you can skip Step 1 and go straight to creating `backend.tf`.
+- **Safe**: The migration prompt gives you a chance to verify before state moves. The storage account has `versioning_enabled = true` for rollback safety.
+
+### Alternative: Manual Bootstrap
+
+Instead of the two-step Terraform approach, you can create the storage account manually first:
+
+```bash
+az group create --name todoosy-rg-ppe --location westus3
+az storage account create --name todoosystppe --resource-group todoosy-rg-ppe \
+  --sku Standard_LRS --min-tls-version TLS1_2
+az storage container create --name tfstate --account-name todoosystppe
+```
+
+Then start directly with `backend.tf` in place — no migration needed since there's no prior local state.
+
 ## Migration from V1
 
 If using the original pattern with `locals.tf` reading JSON for cloud config:
