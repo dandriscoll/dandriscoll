@@ -6,7 +6,6 @@ icon: botframework-icon.png
 hero: botframework.png
 shipped: 2016-03-30
 version: v1.0
-theme: ruby
 collaborators:
   - tomlm
   - lilich
