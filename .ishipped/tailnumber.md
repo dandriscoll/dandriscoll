@@ -1,6 +1,6 @@
 ---
 title: "Tail Number"
-summary: "Offline aircraft registration lookup for FAA and Transport Canada databases."
+summary: "Offline FAA aircraft registration lookup app."
 shipped: 2024-10-01
 tags: [aviation, ios, swiftui, offline, database]
 theme: midnight
