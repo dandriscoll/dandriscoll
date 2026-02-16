@@ -151,6 +151,8 @@ Scope determination involves judgment. The assessor applies the following princi
 
 **Exclude framework guarantees.** Behavior guaranteed by the framework or language runtime—such as type enforcement in a statically typed language, or HTTP routing in a well-tested framework—need not be re-validated unless the code under test customizes or overrides that behavior.
 
+**Derive scope independently of existing tests.** The total possible scope must be determined from requirements, environment, and code analysis—not from the structure or categories of tests that already exist. If the existing test suite contains only unit tests, this must not lead the assessor to define scope only in terms of unit-testable scenarios. The assessor must evaluate the full scenario space across all test categories defined in Section 3—unit, integration, end-to-end, contract, and any other applicable category—as part of a single, unified scope determination. The absence of an entire test category in the current suite is itself a finding, not a boundary on the assessment. Begin by enumerating what the system needs validated at every level, then assess what exists against that enumeration. Never use existing test files, directory structures, or test runner configurations as the starting point for scope. Start from the product's behaviors and work outward to what tests must exist.
+
 **Record everything.** Every inclusion and exclusion decision is recorded in the Scope Definition Document with sufficient reasoning for another assessor to evaluate the judgment.
 
 #### 4.1.5 Required Intermediate Document: Scope Definition Document
@@ -161,8 +163,9 @@ The assessor must produce a **Scope Definition Document** for each component und
 2. **Requirements inventory.** A list of all requirements, specifications, or acceptance criteria consulted, or an explicit statement that none exist with a description of how intended behavior was inferred.
 3. **Environmental factors.** A list of environmental concerns identified as relevant to this component.
 4. **Testable scenario enumeration.** For each coverage dimension (Section 4.2), a list of every concrete testable scenario identified, organized by dimension. Each scenario is a single, specific, verifiable behavior (e.g., "function returns empty list when input list is null" rather than "function handles edge cases").
-5. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
-6. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis.
+5. **Test category coverage plan.** For each test category defined in Section 3 (unit, integration, end-to-end, contract, performance, smoke), a determination of whether that category is applicable to the component under evaluation and what scenarios it must address. If a category is not applicable, the rationale must be recorded. This enumeration must be derived from the component's architecture and user-facing behavior, not from what test categories happen to exist in the current codebase. The absence of end-to-end tests, integration tests, or any other category in the existing suite does not exempt the assessor from evaluating whether that category is needed.
+6. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
+7. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis.
 
 This document is the foundation for all subsequent evaluation. Coverage ratios cannot be computed without it.
 
@@ -506,6 +509,7 @@ The assessor must produce these documents as a required part of the evaluation p
 - Requirements inventory: all requirements, specifications, or acceptance criteria consulted. Where none exist, an explicit statement of how intended behavior was inferred.
 - Environmental factors identified as relevant to this component.
 - Testable scenario enumeration: for each of the five coverage dimensions, a list of every concrete testable scenario. Each scenario must be specific and verifiable (e.g., "function returns 0 when input is an empty array" rather than "function handles edge cases").
+- Test category coverage plan: for each test category in Section 3, a determination of applicability and required scenarios, derived from the component's architecture and user-facing behavior—not from what test categories currently exist. The absence of an entire test category in the existing suite must not be treated as evidence that the category is inapplicable.
 - Exclusions: behaviors or code paths explicitly excluded from scope, with rationale.
 - Source attribution: for each scenario, whether it was derived from requirements, environment analysis, or code analysis.
 
@@ -573,7 +577,7 @@ This section defines the procedure an assessor follows when evaluating a test su
 
 The assessor executes the following phases in order. Each phase depends on the output of the preceding phase.
 
-**Phase 1: Scope Determination.** For each component under evaluation, the assessor analyzes requirements, environment, and code to identify the total possible scope. The assessor produces the Scope Definition Document (Section 8.1). No coverage measurement occurs until this document is complete.
+**Phase 1: Scope Determination.** For each component under evaluation, the assessor analyzes requirements, environment, and code to identify the total possible scope. The assessor must enumerate needed scenarios across all test categories defined in Section 3—including end-to-end tests—regardless of what categories currently exist in the codebase. The assessor produces the Scope Definition Document (Section 8.1), which must include the Test Category Coverage Plan (Section 8.1, item 5). No coverage measurement occurs until this document is complete.
 
 **Phase 2: Test Classification.** The assessor classifies every existing test by its mocking profile and purpose, following the procedure in Section 3.7. Classification determines which column of the Canonical Completeness Definition Matrix (Section 4.3) applies to each test.
 
@@ -650,3 +654,31 @@ When the assessor has completed per-component evaluations, a suite-level summary
 4. **Failure pattern prevalence.** Report the frequency of each failure pattern across the suite, identifying systemic patterns versus isolated instances.
 5. **Critical gap inventory.** A consolidated list of all Critical and High severity gaps across the suite, ordered by severity.
 6. **Overall assessment.** A narrative synthesis characterizing the test suite's strengths, systemic weaknesses, and areas of greatest risk.
+
+---
+
+## 10. Documentation Alignment
+
+When assessment findings lead to the creation of new test infrastructure—new test suites, new test categories, new test runners, or new CI/CD stages—the assessor or implementer must identify and update any project documentation that defines completion criteria, lists runnable commands, or describes CI/CD stages. Tests that exist but are not referenced in project documentation will be bypassed by future contributors.
+
+### 10.1 Documents That Commonly Require Updates
+
+The following types of project documents commonly define what tests exist, how to run them, and when they are expected to pass. When new test infrastructure is introduced, each of these must be checked and updated if present:
+
+- **Workflow guides.** Documents that describe development workflows, including which test commands to run before submitting code.
+- **Contribution guides.** Documents (e.g., CONTRIBUTING.md) that instruct contributors on how to validate their changes, including which test suites to execute.
+- **Onboarding documents.** Documents that orient new team members on the project's testing practices, tooling, and expectations.
+- **Agent instruction files.** Documents (e.g., CLAUDE.md, .cursorrules, or equivalent) that instruct AI agents or automated tools on project conventions, including test commands and validation steps.
+- **CI/CD pipeline definitions.** Configuration files that define which tests run in continuous integration. A new test suite that is not added to the CI pipeline will not gate merges.
+- **Completion criteria or definition of done.** Any document that defines what "done" means for a task, feature, or pull request, including which tests must pass.
+
+### 10.2 The Documentation Alignment Check
+
+When new test infrastructure is introduced as a result of assessment findings, the implementer must:
+
+1. **Inventory project documentation.** Identify all documents in the repository that reference test commands, test suites, CI stages, or completion criteria.
+2. **Evaluate each document for staleness.** For each document identified, determine whether it reflects the new test scope. If the document lists test commands, does it include the new commands? If it describes CI stages, does it include the new stage? If it defines completion criteria, does it include the new tests?
+3. **Update stale documents.** Bring each document into alignment with the new test infrastructure. Add new test commands, new suite descriptions, new CI stage references, and new completion criteria as appropriate.
+4. **Record updates made.** The list of documents updated—and the specific changes made—must be recorded as part of the implementation deliverables.
+
+If project documentation is not updated to reflect new test infrastructure, the tests exist but nothing tells contributors to run them. Future work will bypass the new tests, and the coverage gains from the assessment will erode silently.
