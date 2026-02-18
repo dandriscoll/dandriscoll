@@ -38,6 +38,8 @@ The intended audience is any agent, reviewer, or auditor tasked with assessing t
 
 **Coverage ratio.** The proportion of scenarios within a completeness definition that have corresponding tests with meaningful assertions. Expressed as tested scenarios divided by total scenarios in the completeness definition.
 
+**Experience.** A distinct user-facing product surface through which users interact with the system. Each experience has its own runtime, dependency chain, and deployment artifact. Examples: a mobile app (React Native on device), a web app (SPA in a browser), an admin portal (separate SPA), a CLI tool, a public API consumed by third parties. Two experiences that serve the same user goal (e.g., "sign in") are distinct if they execute different code paths through different runtimes. The experience is the top-level organizing unit for scenario enumeration (Section 4.1.3.1).
+
 **Intermediate document.** A structured artifact produced by the assessor during evaluation that records findings, reasoning, and conclusions at a specific phase of the assessment process. Intermediate documents make the assessment auditable and provide the basis for final conclusions.
 
 ---
@@ -74,6 +76,8 @@ An end-to-end test must not require external network access to systems whose lif
 
 **Does not qualify as an end-to-end test:** A test that mocks the database layer while exercising the rest of the stack (that is an integration test). A test that calls a staging API not controlled by the test runner (that has uncontrolled external dependencies).
 
+**Unique defect detection role.** End-to-end tests are the only test category that reliably detects cross-component contract failures—defects that arise when two or more components hold independent, incompatible assumptions about their shared interface. When components are tested in isolation (via unit tests) or against mocked interfaces (via contract tests), each side's mocks encode that side's assumptions. If both sides independently misunderstand the contract—for example, one component sends a token lifetime in seconds while the consuming component interprets the same field as minutes—unit and contract tests on both sides will pass because each side's mocks confirm its own assumptions. Only an end-to-end test, which exercises both components through their real interface without mocks, will expose the mismatch. This class of defect is invisible to any test category that substitutes mocks for the real cross-component interaction.
+
 ### 3.4 Contract Tests
 
 Contract tests validate that interfaces between services conform to agreed-upon schemas or API specifications. A contract test must validate against an explicit contract definition—an OpenAPI specification, a Protobuf schema, a Pact file, or equivalent formal artifact. It must be runnable by either the producer or consumer independently.
@@ -92,7 +96,21 @@ Smoke tests validate that critical paths function at a baseline level, typically
 
 Smoke tests are orthogonal to the mocking-profile axis. They typically operate at the end-to-end level but may operate at any level. The mocking profile is noted but the primary classification is by purpose.
 
-### 3.7 Classification Decision Procedure
+### 3.7 Mandatory Test Category Requirements
+
+Certain classes of scenario require end-to-end tests as a matter of framework rule, not assessor judgment. For these scenarios, unit tests, integration tests, and contract tests—regardless of their quality or quantity—cannot substitute for an end-to-end test that exercises the real integrated system with no mocks. The rationale is structural: mocked tests encode each side's assumptions independently and cannot detect mismatches between those assumptions (see Section 3.3, "Unique defect detection role").
+
+The following three rules are mandatory. Scenarios that fall under any of these rules must have at least one end-to-end test. Their absence is classified as a Critical severity gap (Section 9.4) regardless of coverage achieved at other test category levels.
+
+**Rule 1: Cross-component user workflows require E2E tests.** Any scenario where a user action traverses multiple components—a client calling an API, a frontend submitting a form processed by a backend, a mobile app exchanging tokens with an auth service—must have at least one end-to-end test with no mocks. Unit tests that mock the API response and contract tests that validate response shape independently do not substitute. Each side's mocks encode that side's assumptions separately; only an end-to-end test exercises the real interface and can detect contract mismatches between components.
+
+**Rule 2: Incident-linked scenarios require E2E tests.** Any scenario that is tagged as originating from a production incident, a pre-production environment (PPE) incident, or a post-mortem finding must have an end-to-end test that reproduces the conditions under which the incident occurred. Production and PPE incidents are by definition failures of the integrated system—they occurred despite whatever unit, integration, and contract tests existed at the time. A test that mocks the components involved in the incident cannot verify that the integrated fix works, because the incident itself demonstrated that the components' independent assumptions were wrong. The E2E test must exercise the same cross-component path that failed in production.
+
+**Rule 3: Authentication and authorization flows require E2E tests.** Login, signup, token refresh, session management, and privilege escalation workflows are both cross-component (spanning client, API, and identity provider) and security-critical. These workflows must have end-to-end tests exercising the full path from user input to authenticated/authorized state. The security sensitivity of these flows means that a contract mismatch—such as a token lifetime field interpreted differently by producer and consumer—has outsized impact, and the cross-component nature means mocked tests on either side cannot detect it.
+
+When the assessor evaluates scenarios in the Scope Definition Document, each scenario must be checked against these three rules. If a scenario matches any rule, the assessor must record the applicable rule and verify that a corresponding end-to-end test exists. The Test Category Coverage Plan (Section 4.1.5, item 5) must explicitly identify all scenarios subject to mandatory rules and confirm the presence or absence of the required end-to-end tests.
+
+### 3.8 Classification Decision Procedure
 
 When classifying a test, the assessor applies the following procedure:
 
@@ -101,6 +119,8 @@ When classifying a test, the assessor applies the following procedure:
 2. **Check for orthogonal purpose.** If the test validates an interface contract against a formal specification, classify it as a contract test. If the test validates behavior against quantitative performance thresholds, classify it as a performance test. If the test validates baseline operational viability as a deployment gate, classify it as a smoke test.
 
 3. **Record both classifications when applicable.** A test may be both a contract test and an integration test. In such cases, record both: the mocking-profile category and the purpose category. Assessment against coverage dimensions uses the appropriate column from the Canonical Completeness Definition Matrix based on the primary purpose served.
+
+4. **Verify mandatory category requirements.** After classification, check every scenario subject to the mandatory rules in Section 3.7 against the classified test inventory. A scenario that is covered by unit and contract tests but requires an end-to-end test under Section 3.7 is not adequately covered until the required end-to-end test exists. Record any scenario where the mandatory test category is absent—this is a Critical severity gap regardless of coverage at other levels.
 
 ---
 
@@ -141,6 +161,20 @@ Analysis of the code itself reveals testable surface area that neither requireme
 - **Boundary conditions.** Every parameter with a constrained domain implies testable scenarios at the boundaries of that domain (minimum, maximum, zero, empty, null, overflow).
 - **Implicit contracts.** Behavior that callers depend on but that is not formally documented—ordering guarantees, idempotency, thread safety—constitutes testable surface area if the code's consumers rely on it.
 
+#### 4.1.3.1 Experience-Based Scenario Organization
+
+When a product has multiple user-facing surfaces—a mobile app, a web app, an admin portal, a CLI, a public API—each surface constitutes a distinct **experience** (Section 2). The scenario list must be organized by experience as the top-level grouping, not by component, feature, or user goal alone.
+
+The same user goal manifests as separate scenarios in each experience when the underlying code paths differ. "User signs in" on a mobile app (native keychain storage via a platform bridge) and "user signs in" on a web app (browser cookies via fetch) are two distinct scenarios with different runtimes, different dependencies, and different failure modes. A test that validates sign-in through the web app does not cover sign-in through the mobile app—they share a goal but execute entirely different code.
+
+**Identifying experiences.** During scope determination, the assessor must identify every distinct experience the product offers. An experience is distinct if it has its own runtime environment (e.g., React Native on a device vs. a Vite SPA in a browser), its own deployment artifact, or its own dependency chain for a given user workflow. The assessor records the list of identified experiences in the Scope Definition Document.
+
+**Filing scenarios under experiences.** Every user-facing scenario must be filed under exactly one experience. If a user goal (e.g., "sign in," "create account," "upload media") is available through multiple experiences, it appears as a separate scenario entry under each experience. Each entry must record the experience-specific code path that implements that goal. A scenario filed under one experience cannot satisfy coverage for another experience.
+
+**E2E test targets per experience.** Each identified experience implies its own E2E test target—a runtime environment in which end-to-end tests for that experience execute. A mobile app experience requires a mobile test runner (e.g., Detox, Maestro, or Expo web). A web app experience requires a browser automation tool (e.g., Playwright, Cypress). An admin portal with a separate SPA requires its own browser automation project. The E2E test infrastructure must include a test target for every identified experience; an experience with no E2E test target has zero E2E coverage by construction.
+
+**Non-user-facing components.** Components that are not directly user-facing (shared libraries, internal services, database layers) do not have their own experience. Their scenarios are organized by component as before. Experience-based organization applies only to the user-facing surface through which workflows are exercised.
+
 #### 4.1.4 Principles for Scope Determination
 
 Scope determination involves judgment. The assessor applies the following principles to maintain consistency:
@@ -153,6 +187,8 @@ Scope determination involves judgment. The assessor applies the following princi
 
 **Derive scope independently of existing tests.** The total possible scope must be determined from requirements, environment, and code analysis—not from the structure or categories of tests that already exist. If the existing test suite contains only unit tests, this must not lead the assessor to define scope only in terms of unit-testable scenarios. The assessor must evaluate the full scenario space across all test categories defined in Section 3—unit, integration, end-to-end, contract, and any other applicable category—as part of a single, unified scope determination. The absence of an entire test category in the current suite is itself a finding, not a boundary on the assessment. Begin by enumerating what the system needs validated at every level, then assess what exists against that enumeration. Never use existing test files, directory structures, or test runner configurations as the starting point for scope. Start from the product's behaviors and work outward to what tests must exist.
 
+**Apply mandatory test category requirements.** Section 3.7 defines three classes of scenario that require end-to-end tests as a matter of framework rule: cross-component user workflows, incident-linked scenarios, and authentication/authorization flows. When the assessor identifies scenarios subject to these rules during scope determination, the scenarios must be flagged as requiring E2E tests in the Scope Definition Document. Unit tests and contract tests with mocks cannot substitute for end-to-end tests for these scenarios, because mocked tests validate each component's assumptions in isolation and cannot detect the class of cross-component contract failures described in Section 3.3. If a feature's Scope Definition Document identifies scenarios subject to mandatory rules and the test suite contains no end-to-end tests for those scenarios, the feature cannot be classified as Fully Covered regardless of the coverage ratios achieved by unit, integration, or contract tests alone.
+
 **Record everything.** Every inclusion and exclusion decision is recorded in the Scope Definition Document with sufficient reasoning for another assessor to evaluate the judgment.
 
 #### 4.1.5 Required Intermediate Document: Scope Definition Document
@@ -160,12 +196,13 @@ Scope determination involves judgment. The assessor applies the following princi
 The assessor must produce a **Scope Definition Document** for each component under evaluation before proceeding to coverage measurement. This document contains:
 
 1. **Component identification.** The name, location, and boundaries of the component under assessment.
-2. **Requirements inventory.** A list of all requirements, specifications, or acceptance criteria consulted, or an explicit statement that none exist with a description of how intended behavior was inferred.
-3. **Environmental factors.** A list of environmental concerns identified as relevant to this component.
-4. **Testable scenario enumeration.** For each coverage dimension (Section 4.2), a list of every concrete testable scenario identified, organized by dimension. Each scenario is a single, specific, verifiable behavior (e.g., "function returns empty list when input list is null" rather than "function handles edge cases").
-5. **Test category coverage plan.** For each test category defined in Section 3 (unit, integration, end-to-end, contract, performance, smoke), a determination of whether that category is applicable to the component under evaluation and what scenarios it must address. If a category is not applicable, the rationale must be recorded. This enumeration must be derived from the component's architecture and user-facing behavior, not from what test categories happen to exist in the current codebase. The absence of end-to-end tests, integration tests, or any other category in the existing suite does not exempt the assessor from evaluating whether that category is needed.
-6. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
-7. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis.
+2. **Experience inventory.** A list of every distinct user-facing experience identified for this product (Section 4.1.3.1). For each experience, record the runtime environment, deployment artifact, and the E2E test target (or an explicit statement that no E2E test target exists, which constitutes a finding). Non-user-facing components note "N/A — not a user-facing experience."
+3. **Requirements inventory.** A list of all requirements, specifications, or acceptance criteria consulted, or an explicit statement that none exist with a description of how intended behavior was inferred.
+4. **Environmental factors.** A list of environmental concerns identified as relevant to this component.
+5. **Testable scenario enumeration.** For each coverage dimension (Section 4.2), a list of every concrete testable scenario identified. For user-facing scenarios, the list must be organized by experience as the top-level grouping (Section 4.1.3.1): each scenario is filed under exactly one experience, and a user goal available through multiple experiences appears as a separate entry under each. Each entry must record the experience-specific code path. Each scenario is a single, specific, verifiable behavior (e.g., "mobile app: user signs in via react-native-keychain → native bridge → OS keychain" rather than "user signs in").
+6. **Test category coverage plan.** For each test category defined in Section 3 (unit, integration, end-to-end, contract, performance, smoke), a determination of whether that category is applicable to the component under evaluation and what scenarios it must address. If a category is not applicable, the rationale must be recorded. For E2E tests, the plan must confirm that an E2E test target exists for each identified experience; an experience with no E2E test target has zero E2E coverage by construction. This enumeration must be derived from the component's architecture and user-facing behavior, not from what test categories happen to exist in the current codebase. The absence of end-to-end tests, integration tests, or any other category in the existing suite does not exempt the assessor from evaluating whether that category is needed.
+7. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
+8. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis.
 
 This document is the foundation for all subsequent evaluation. Coverage ratios cannot be computed without it.
 
@@ -493,7 +530,7 @@ Where the assessor identifies instances of any failure pattern during evaluation
 
 ## 8. Intermediate Document Requirements
 
-The assessment process produces five intermediate documents. These documents are mandatory artifacts of the evaluation. They serve two purposes: they make the assessor's reasoning transparent and auditable, and they provide structured records that can be reviewed, challenged, or compared across assessments.
+The assessment process produces six intermediate documents. These documents are mandatory artifacts of the evaluation. They serve two purposes: they make the assessor's reasoning transparent and auditable, and they provide structured records that can be reviewed, challenged, or compared across assessments.
 
 The assessor must produce these documents as a required part of the evaluation process. They are not optional supplementary output. The final assessment conclusions must be traceable to the evidence and reasoning recorded in these documents.
 
@@ -506,10 +543,11 @@ The assessor must produce these documents as a required part of the evaluation p
 **Required contents:**
 
 - Component identification (name, location, boundaries).
+- Experience inventory: every distinct user-facing experience, with runtime, deployment artifact, and E2E test target (Section 4.1.3.1). An experience with no E2E test target is a finding.
 - Requirements inventory: all requirements, specifications, or acceptance criteria consulted. Where none exist, an explicit statement of how intended behavior was inferred.
 - Environmental factors identified as relevant to this component.
-- Testable scenario enumeration: for each of the five coverage dimensions, a list of every concrete testable scenario. Each scenario must be specific and verifiable (e.g., "function returns 0 when input is an empty array" rather than "function handles edge cases").
-- Test category coverage plan: for each test category in Section 3, a determination of applicability and required scenarios, derived from the component's architecture and user-facing behavior—not from what test categories currently exist. The absence of an entire test category in the existing suite must not be treated as evidence that the category is inapplicable.
+- Testable scenario enumeration: for each of the five coverage dimensions, a list of every concrete testable scenario. User-facing scenarios must be organized by experience as the top-level grouping—a user goal available through multiple experiences appears as a separate entry under each, with the experience-specific code path recorded. Each scenario must be specific and verifiable (e.g., "mobile app: user signs in via react-native-keychain → native bridge" rather than "user signs in").
+- Test category coverage plan: for each test category in Section 3, a determination of applicability and required scenarios, derived from the component's architecture and user-facing behavior—not from what test categories currently exist. For E2E tests, must confirm an E2E test target exists per experience. The absence of an entire test category in the existing suite must not be treated as evidence that the category is inapplicable.
 - Exclusions: behaviors or code paths explicitly excluded from scope, with rationale.
 - Source attribution: for each scenario, whether it was derived from requirements, environment analysis, or code analysis.
 
@@ -567,6 +605,23 @@ The assessor must produce these documents as a required part of the evaluation p
 - Failure pattern summary listing all patterns identified and their aggregate impact.
 - Prioritized gap list ordering all identified deficiencies by assessed severity and risk.
 
+### 8.6 Gap Reconciliation Document
+
+**Produced during:** Section 9.6 (Gap Reconciliation), Phase 6 of the Assessment Sequence.
+
+**Purpose:** Ensures every uncovered scenario identified during the assessment is explicitly assigned a disposition—implemented, deferred, or excluded—so that no findings are silently dropped. Enforces exact count matching between the complete gap set and the reconciliation table to prevent silent omission of entire scenario categories.
+
+**Required contents:**
+
+- The reconciliation table: one row per entry in the complete gap set, with the scenario, its severity, and its disposition (implemented, deferred, or excluded).
+- For each implemented gap: the test file path and test name, confirmed at the required test category level.
+- For each deferred gap: the severity classification, the implementation artifact reference (ticket, plan, work package), and the required test category level. Critical and High severity deferrals require decision-maker approval beyond the assessor.
+- For each excluded gap: the rationale for exclusion or risk acceptance. Critical and High severity exclusions require decision-maker approval.
+- Exact count comparison: the total number of entries in the complete gap set versus the number of rows in the reconciliation table, with explicit confirmation that they match. Any discrepancy is a process failure.
+- Verification that no applicable test category from the Scope Definition Document's Test Category Coverage Plan has been omitted from the implementation plan.
+- Verification that all scenarios subject to mandatory rules (Section 3.7) are addressed at the required test category level (E2E).
+- A list of any unreconciled gaps (gaps with no assigned disposition). An assessment with unreconciled gaps is incomplete.
+
 ---
 
 ## 9. Assessment Application Guide
@@ -577,9 +632,9 @@ This section defines the procedure an assessor follows when evaluating a test su
 
 The assessor executes the following phases in order. Each phase depends on the output of the preceding phase.
 
-**Phase 1: Scope Determination.** For each component under evaluation, the assessor analyzes requirements, environment, and code to identify the total possible scope. The assessor must enumerate needed scenarios across all test categories defined in Section 3—including end-to-end tests—regardless of what categories currently exist in the codebase. The assessor produces the Scope Definition Document (Section 8.1), which must include the Test Category Coverage Plan (Section 8.1, item 5). No coverage measurement occurs until this document is complete.
+**Phase 1: Scope Determination.** For each component under evaluation, the assessor analyzes requirements, environment, and code to identify the total possible scope. The assessor must first identify all distinct user-facing experiences (Section 4.1.3.1) and organize user-facing scenarios by experience—a user goal available through multiple experiences (e.g., sign-in on mobile vs. web) must appear as a separate scenario under each experience. The assessor must enumerate needed scenarios across all test categories defined in Section 3—including end-to-end tests—regardless of what categories currently exist in the codebase. The assessor produces the Scope Definition Document (Section 8.1), which must include the Experience Inventory (Section 8.1, item 2) and the Test Category Coverage Plan (Section 8.1, item 6). No coverage measurement occurs until this document is complete.
 
-**Phase 2: Test Classification.** The assessor classifies every existing test by its mocking profile and purpose, following the procedure in Section 3.7. Classification determines which column of the Canonical Completeness Definition Matrix (Section 4.3) applies to each test.
+**Phase 2: Test Classification.** The assessor classifies every existing test by its mocking profile and purpose, following the procedure in Section 3.8. Classification determines which column of the Canonical Completeness Definition Matrix (Section 4.3) applies to each test.
 
 **Phase 3: Coverage Mapping.** The assessor maps each scenario in the Scope Definition Document to its corresponding test(s), applying the counting rules in Section 4.4.1. The assessor produces the Coverage Mapping Document (Section 8.2), including coverage ratios per dimension.
 
@@ -587,7 +642,9 @@ The assessor executes the following phases in order. Each phase depends on the o
 
 **Phase 5: Failure Pattern Identification.** The assessor scans all tests—including those that contribute to coverage and those that do not—for the failure patterns defined in Section 7. Each identified instance is recorded in the Failure Pattern Log (Section 8.4).
 
-**Phase 6: Synthesis and Classification.** The assessor synthesizes findings from all preceding documents, assigns the comprehensiveness classification per Section 5, and produces the Component Assessment Summary (Section 8.5).
+**Phase 6: Gap Reconciliation.** Before synthesis, the assessor performs a reconciliation check to ensure that every uncovered scenario identified during the assessment is accounted for. This phase must occur before synthesis so that reconciliation findings—including any unreconciled gaps or omitted test categories—are incorporated into the final classification. See Section 9.6 for the full reconciliation procedure.
+
+**Phase 7: Synthesis and Classification.** The assessor synthesizes findings from all preceding documents—including the Gap Reconciliation Document—assigns the comprehensiveness classification per Section 5, and produces the Component Assessment Summary (Section 8.5). Synthesis must reflect reconciliation outcomes: a component with unreconciled gaps or with mandatory test categories (Section 3.7) absent from the remediation plan cannot be classified as Fully Covered.
 
 ### 9.2 Per-Function/Unit Assessment Checklist
 
@@ -623,10 +680,20 @@ When evaluating tests at the function or unit level, the assessor applies the fo
 
 When evaluating tests at the feature or module level, the assessor aggregates unit-level findings and additionally evaluates:
 
+**Experience coverage:**
+- [ ] Have all distinct user-facing experiences been identified (Section 4.1.3.1)?
+- [ ] Are user-facing scenarios organized by experience, with each experience's scenarios listed separately—not collapsed across experiences?
+- [ ] Does each identified experience have its own E2E test target (runtime environment)?
+- [ ] For user goals available through multiple experiences (e.g., sign-in), does each experience have its own scenario entry with the experience-specific code path?
+
+**Integration and E2E coverage:**
 - [ ] Are integration tests present that validate interactions between the module's components and its real dependencies?
 - [ ] Do integration tests cover the interaction paths identified in the Scope Definition Document?
-- [ ] Are end-to-end tests present that validate the feature's user-facing workflows?
-- [ ] Do end-to-end tests cover the workflow scenarios identified in the Scope Definition Document?
+- [ ] Are end-to-end tests present that validate the feature's user-facing workflows? **Mandatory:** If the Scope Definition Document identifies scenarios subject to mandatory rules (Section 3.7)—cross-component workflows, incident-linked scenarios, or auth flows—end-to-end tests for those scenarios are required per experience. Unit and contract tests with mocks cannot substitute (Section 3.3). Their absence is a Critical severity gap (Section 9.4).
+- [ ] Do end-to-end tests cover all workflow scenarios identified in the Scope Definition Document, including cross-component interaction paths where contract mismatches between independently mocked components would otherwise go undetected?
+- [ ] Have all scenarios subject to mandatory test category rules (Section 3.7) been verified to have tests at the required category level, per experience?
+
+**Contract and distribution:**
 - [ ] Are contract tests present where the module exposes or consumes external interfaces?
 - [ ] Is the distribution of test categories appropriate for the module's architecture and risk profile?
 - [ ] Are there coverage gaps that exist at the unit level and are not compensated by tests at other levels?
@@ -636,7 +703,7 @@ When evaluating tests at the feature or module level, the assessor aggregates un
 
 When the assessor identifies a gap—a scenario in the completeness definition that lacks adequate test coverage—the gap is classified by severity using the following scale:
 
-**Critical.** The untested scenario involves a primary functional path, a security-sensitive operation, a data integrity concern, or a failure mode that could cause system-wide impact. A defect in this scenario would be high-severity in production. Examples: authentication bypass, data corruption, unhandled exception in a critical path, missing validation on financial calculations.
+**Critical.** The untested scenario involves a primary functional path, a security-sensitive operation, a data integrity concern, or a failure mode that could cause system-wide impact. A defect in this scenario would be high-severity in production. Any scenario subject to the mandatory test category rules in Section 3.7 that lacks the required end-to-end test is automatically classified as Critical. Examples: authentication bypass, data corruption, unhandled exception in a critical path, missing validation on financial calculations, cross-component workflow without E2E test, incident-linked scenario without E2E regression test.
 
 **High.** The untested scenario involves an important but non-primary path, error handling for a likely failure mode, or a boundary condition on a high-traffic function. A defect would be noticeable to users and require prompt remediation. Examples: missing timeout handling for a frequently called external service, untested boundary condition on a search function, missing validation on a commonly used input field.
 
@@ -654,6 +721,35 @@ When the assessor has completed per-component evaluations, a suite-level summary
 4. **Failure pattern prevalence.** Report the frequency of each failure pattern across the suite, identifying systemic patterns versus isolated instances.
 5. **Critical gap inventory.** A consolidated list of all Critical and High severity gaps across the suite, ordered by severity.
 6. **Overall assessment.** A narrative synthesis characterizing the test suite's strengths, systemic weaknesses, and areas of greatest risk.
+
+### 9.6 Gap Reconciliation
+
+After the assessment is complete, the assessor must verify that every uncovered scenario identified in the Scope Definition Document has been explicitly accounted for. The purpose of this phase is to prevent entire categories of findings from being silently dropped between assessment and remediation planning.
+
+The assessor performs the following reconciliation procedure:
+
+1. **Extract the full gap inventory.** From the Coverage Mapping Document, enumerate every scenario that was recorded as uncovered or partially covered. From the Quality Assessment Document, enumerate every scenario whose coverage was invalidated by quality exclusions. This combined list is the **complete gap set**. Record the total count.
+
+2. **Build the reconciliation table.** Create a table with one row per entry in the complete gap set. Every entry must be assigned exactly one of the following dispositions:
+   - **Implemented.** The gap has been addressed by a specific test. Record the test file path and test name. The test must exist and must be classified at the required test category level—a scenario requiring an E2E test under Section 3.7 is not resolved by a unit test.
+   - **Deferred.** The gap is acknowledged and assigned to a specific implementation plan, task, or backlog item. The assignment must reference a concrete artifact (a ticket, a plan document, a named work package)—not a vague intention to address it later. The severity classification (Section 9.4) must be recorded. Critical and High severity gaps require escalation to a decision-maker; the assessor alone cannot defer these.
+   - **Excluded.** The assessor's inclusion of the scenario in scope is contested or the scenario is accepted as a known risk. The rationale must be recorded. For risk acceptance, the severity must be recorded and Critical and High severity exclusions require decision-maker approval beyond the assessor. For scope disputes, the contesting party's rationale is recorded and the scenario remains in the gap set until the dispute is resolved.
+
+3. **Verify exact count match.** The number of rows in the reconciliation table must exactly equal the number of entries in the complete gap set. Every uncovered scenario must appear in the table with a disposition. Any discrepancy between the gap set count and the reconciliation table count is a process failure—it indicates that scenarios were silently dropped. The assessor must resolve all discrepancies before proceeding. An assessment where the reconciliation count does not match the gap count is incomplete.
+
+4. **Verify completeness by test category.** The assessor must verify that no entire test category (unit, integration, end-to-end, contract) identified as applicable in the Scope Definition Document's Test Category Coverage Plan has been omitted from the remediation plan. Specifically: if the Scope Definition Document identified uncovered E2E scenarios, the implementation plan must include E2E test work items. An implementation plan that addresses unit test gaps but omits an entire test category present in the scope definition fails reconciliation. Additionally, all scenarios subject to the mandatory rules in Section 3.7 must be verified: if a mandatory-rule scenario is deferred, the deferred work item must specify a test at the required category level (E2E), not a lower-level substitute.
+
+5. **Produce the Gap Reconciliation Document.** The assessor produces a document containing the reconciliation table and the following summary:
+   - The total count of gaps in the complete gap set, by severity (Critical, High, Medium, Low).
+   - The count and list of gaps with disposition "Implemented," with test file paths and test names.
+   - The count and list of gaps with disposition "Deferred," with their severity classifications and implementation artifact references.
+   - The count and list of gaps with disposition "Excluded," with rationales and approval records where required.
+   - An explicit count comparison: complete gap set count versus reconciliation table row count, with confirmation that they match or a flagged discrepancy.
+   - Verification that no applicable test category has been omitted from the implementation plan, or a flagged exception if one has.
+   - A specific check that all scenarios subject to mandatory rules (Section 3.7) have been addressed at the required test category level.
+   - Any gaps that have no disposition assigned are flagged as **unreconciled**. An assessment with unreconciled gaps is incomplete.
+
+The Gap Reconciliation Document is added to the set of required intermediate documents. An assessment that does not include gap reconciliation permits uncovered scenarios to be lost between the assessment's findings and any subsequent action, defeating the purpose of the assessment.
 
 ---
 
@@ -682,3 +778,77 @@ When new test infrastructure is introduced as a result of assessment findings, t
 4. **Record updates made.** The list of documents updated—and the specific changes made—must be recorded as part of the implementation deliverables.
 
 If project documentation is not updated to reflect new test infrastructure, the tests exist but nothing tells contributors to run them. Future work will bypass the new tests, and the coverage gains from the assessment will erode silently.
+
+---
+
+## 11. Framework Compliance Checklist
+
+This checklist provides a single-pass verification that an assessment satisfies all framework requirements. Each item references the section containing the full specification. An assessment is compliant when every applicable item is checked.
+
+### 11.1 Scope Determination
+
+- [ ] Scope Definition Document produced for each component (Section 4.1.5, Section 8.1)
+- [ ] All distinct user-facing experiences identified, with runtime and E2E test target recorded (Section 4.1.3.1)
+- [ ] User-facing scenarios organized by experience — a user goal available through multiple experiences listed separately under each (Section 4.1.3.1)
+- [ ] Each experience-specific scenario records its own code path, not a generic description
+- [ ] Testable scenarios enumerated across all five coverage dimensions (Section 4.2)
+- [ ] Scope derived independently of existing test structure (Section 4.1.4)
+- [ ] Test Category Coverage Plan included: each test category evaluated for applicability; E2E test target confirmed per experience (Section 4.1.5, item 6)
+- [ ] All scenarios checked against mandatory test category rules (Section 3.7)
+- [ ] Mandatory-rule scenarios flagged with the applicable rule and required test category level
+- [ ] Exclusions recorded with rationale (Section 4.1.4)
+
+### 11.2 Test Classification
+
+- [ ] Every existing test classified by mocking profile (Section 3.8, step 1)
+- [ ] Orthogonal-purpose tests identified (Section 3.8, steps 2-3)
+- [ ] Mandatory category requirements verified against classified test inventory (Section 3.8, step 4)
+
+### 11.3 Coverage Mapping
+
+- [ ] Coverage Mapping Document produced for each component (Section 4.4.2, Section 8.2)
+- [ ] Each scenario mapped to a specific test or recorded as uncovered (Section 4.4.2)
+- [ ] Counting rules applied: partial coverage scored at 0.5, quality-excluded tests not counted (Section 4.4.1)
+- [ ] Coverage ratio computed for each dimension (Section 4.4)
+
+### 11.4 Quality Evaluation
+
+- [ ] Quality Assessment Document produced for each component (Section 6.8, Section 8.3)
+- [ ] Every test evaluated against all seven quality criteria (Sections 6.1-6.7)
+- [ ] Quality-excluded tests flagged with disqualifying criteria (Section 6.8)
+- [ ] Coverage ratios adjusted to reflect quality exclusions (Section 4.4.1)
+
+### 11.5 Failure Pattern Identification
+
+- [ ] Every test checked against failure patterns 7.1 through 7.12 (Section 7)
+- [ ] Failure Pattern Log produced with evidence and risk assessment for each instance (Section 7.13, Section 8.4)
+
+### 11.6 Gap Reconciliation
+
+- [ ] Complete gap set extracted from Coverage Mapping and Quality Assessment Documents (Section 9.6, step 1)
+- [ ] Reconciliation table built with one row per gap (Section 9.6, step 2)
+- [ ] Every gap assigned a disposition: implemented, deferred, or excluded (Section 9.6, step 2)
+- [ ] Reconciliation table row count exactly matches complete gap set count (Section 9.6, step 3)
+- [ ] No applicable test category omitted from the implementation plan (Section 9.6, step 4)
+- [ ] All mandatory-rule scenarios (Section 3.7) addressed at the required test category level (Section 9.6, step 4)
+- [ ] Critical and High severity deferrals/exclusions approved by a decision-maker (Section 9.6, step 2)
+- [ ] Gap Reconciliation Document produced (Section 9.6, step 5; Section 8.6)
+
+### 11.7 Synthesis and Classification
+
+- [ ] Component Assessment Summary produced for each component (Section 8.5)
+- [ ] Comprehensiveness classification assigned per Section 5 criteria
+- [ ] Classification reflects reconciliation outcomes — unreconciled gaps or absent mandatory test categories prevent Fully Covered (Section 9.1, Phase 7)
+- [ ] Severity assigned to every gap per Section 9.4
+
+### 11.8 Suite-Level Summary (if applicable)
+
+- [ ] Component classification distribution reported (Section 9.5)
+- [ ] Per-dimension coverage summary reported (Section 9.5)
+- [ ] Critical gap inventory consolidated (Section 9.5)
+
+### 11.9 Documentation Alignment (if new test infrastructure introduced)
+
+- [ ] Project documentation inventoried for test references (Section 10.2)
+- [ ] Stale documents updated to reflect new test commands, CI stages, and completion criteria (Section 10.2)
+- [ ] Updates recorded as part of implementation deliverables (Section 10.2)
