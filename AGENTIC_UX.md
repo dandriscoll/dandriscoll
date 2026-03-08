@@ -38,6 +38,7 @@ Alignment is relative to the next action, not to the full project. Each action m
 - Never overload the user — a single well-framed question with a few options is ideal
 - Selecting an option submits its value as the response
 - Free-text submission overrides any option selection
+- A user's dismissal of a question card should be possible and indicates a misalignment of focus
 - Multiple cards may be presented simultaneously; each is independently answerable
 
 ### 4.2 Suggestion Card
