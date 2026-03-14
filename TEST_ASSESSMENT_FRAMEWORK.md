@@ -175,6 +175,158 @@ The same user goal manifests as separate scenarios in each experience when the u
 
 **Non-user-facing components.** Components that are not directly user-facing (shared libraries, internal services, database layers) do not have their own experience. Their scenarios are organized by component as before. Experience-based organization applies only to the user-facing surface through which workflows are exercised.
 
+#### 4.1.3.2 Systematic Enumeration Procedure
+
+The assessor must follow this procedure to discover journeys, scenarios, components, and interfaces. The procedure is mechanical: each step produces a concrete, numbered artifact that feeds into the next step. The assessor must not skip steps or combine them. The purpose is to prevent omission through systematic traversal rather than relying on the assessor's intuition about what "seems important."
+
+The procedure has five steps. Steps 1–3 work top-down from user-facing entry points. Step 4 works bottom-up from the code. Step 5 cross-references the two directions to surface anything missed.
+
+**Step 1: Entry Point Inventory.**
+
+Scan the codebase and product surface to produce a numbered list of every entry point through which a user or external system initiates interaction. An entry point is any place where control passes from outside the system boundary to inside it.
+
+Sources to scan (the assessor must check every applicable source, not stop after finding some):
+
+- Route definitions (web frameworks, API gateways, GraphQL schemas).
+- CLI command registrations and argument parsers.
+- UI page/screen definitions (route tables, navigation configs, screen component registrations).
+- Event listeners and webhook handlers (incoming events from external systems).
+- Scheduled job definitions (cron jobs, background workers, queue consumers).
+- Public SDK or library exports (functions/classes exposed to external callers).
+- Message queue consumers and subscription handlers.
+
+For each entry point, record:
+1. A sequential identifier (EP-001, EP-002, ...).
+2. The entry point type (HTTP endpoint, UI screen, CLI command, event handler, scheduled job, etc.).
+3. The experience it belongs to (Section 4.1.3.1), or "internal" if not user-facing.
+4. The file path and line number where the entry point is defined.
+5. The HTTP method/route, command name, screen name, event type, or equivalent identifier.
+
+The inventory is complete when every applicable source has been scanned and every discovered entry point is listed. The assessor must record which sources were scanned and confirm that none were skipped.
+
+**Output:** Entry Point Registry — a numbered table of all entry points.
+
+**Step 2: Journey Enumeration.**
+
+For each entry point in the Entry Point Registry, trace the user or system journey from initiation through to every possible terminal state. A journey is a sequence of steps that begins at an entry point, proceeds through processing (which may involve decisions, state changes, and calls to other components), and ends at a terminal state (success response, error response, redirect, UI state change, side effect completion, etc.).
+
+For each entry point:
+1. Identify the initial action (the request, command, click, event, etc.).
+2. Trace the code path forward, identifying every decision point (conditional branch, switch, early return, error check) that creates a fork.
+3. At each decision point, enumerate every branch. Do not follow only the happy path.
+4. Continue tracing each branch until it reaches a terminal state.
+5. Record each unique path from entry to terminal state as a separate journey.
+
+For each journey, record:
+1. A sequential identifier (J-001, J-002, ...), prefixed with the entry point ID (e.g., EP-003/J-002).
+2. The entry point it originates from.
+3. A brief description of the path (e.g., "User submits login form → credentials valid → MFA required → MFA code correct → session created → redirect to dashboard").
+4. Every decision point traversed, noting which branch this journey takes.
+5. The terminal state.
+6. All components touched (by name/module — detailed in Step 4).
+7. Whether the journey is a happy path, an error/failure path, or an edge case path.
+
+The assessor must not stop at happy paths. Every decision point identified in the code must have all its branches represented in at least one journey. If a decision point has three branches, at least three journeys must traverse it (one per branch), though a single journey may traverse multiple decision points.
+
+**Output:** Journey Registry — a numbered table of all journeys, grouped by entry point, with every decision branch covered.
+
+**Step 3: Scenario Derivation.**
+
+For each journey in the Journey Registry, derive concrete testable scenarios by applying the five coverage dimensions (Section 4.2) systematically. This step transforms journeys (which are paths through code) into scenarios (which are specific, verifiable behavioral claims).
+
+For each journey, the assessor must ask and answer each of the following questions. Each answer that identifies a testable behavior produces one scenario.
+
+*Functional / Behavioral (Section 4.2.1):*
+- What is the correct output or terminal state for this journey?
+- What observable side effects must occur (database writes, events emitted, external calls made)?
+- What observable side effects must NOT occur?
+
+*Edge Case / Boundary (Section 4.2.2):*
+- For each input consumed along this journey, what are the boundary values (minimum, maximum, zero, empty, one, max-length, unicode edge cases)?
+- For each boundary value, does the journey's behavior change? If so, that is a separate scenario.
+
+*Negative / Failure Case (Section 4.2.3):*
+- At each step in the journey, what invalid inputs or precondition violations could occur?
+- For each invalid condition, what is the expected rejection behavior (error code, message, state non-change)?
+
+*Error Handling (Section 4.2.4):*
+- At each step where the journey calls a dependency, what happens if that dependency fails (timeout, error response, unavailable, malformed response)?
+- For each failure mode, what is the expected error propagation, logging, or user-facing error?
+
+*State Transition (Section 4.2.5):*
+- Does this journey change persistent state? If so, what is the before state, the transition, and the after state?
+- Can this journey be interrupted mid-transition? If so, what is the expected state after interruption?
+- Does this journey depend on being in a specific state? If so, what happens if the state is wrong?
+
+For each derived scenario, record:
+1. A sequential identifier (S-001, S-002, ...), prefixed with the journey ID (e.g., EP-003/J-002/S-005).
+2. The journey it was derived from.
+3. The coverage dimension it addresses.
+4. A specific, verifiable behavioral claim (e.g., "When login form is submitted with valid credentials and MFA is enabled, system sends MFA code to registered phone and returns 202 with mfa_required=true" — not "MFA works").
+5. The experience it belongs to (inherited from the entry point).
+6. Source attribution: whether the scenario was derived from requirements, environment analysis, or code analysis.
+
+**Output:** Scenario Registry — a numbered table of all scenarios, grouped by journey, tagged by coverage dimension and experience.
+
+**Step 4: Component and Interface Inventory.**
+
+Independent of the top-down journey analysis, perform a bottom-up inventory of all components and their interfaces. This step ensures that internal components, shared libraries, and non-user-facing modules are enumerated even if no journey in Step 2 happened to traverse them.
+
+**4a. Component Inventory.**
+
+Scan the codebase to produce a numbered list of every distinct component. A component is a module, service, package, class, or bounded unit of code that has its own identifiable responsibility and interface. The granularity should match the project's architectural boundaries — in a microservices system, each service is a component; in a monolith, each module or package with a coherent responsibility is a component.
+
+For each component, record:
+1. A sequential identifier (C-001, C-002, ...).
+2. The component name and file path(s).
+3. Its responsibility (one sentence).
+4. Whether it is user-facing (and if so, which experience) or internal.
+5. Its dependencies (other components it calls or relies on).
+6. Its dependents (other components that call or rely on it).
+
+**4b. Interface Inventory.**
+
+For each component, enumerate every interface it exposes or consumes. An interface is a boundary across which one component invokes another: a function signature, an API endpoint, an event contract, a message schema, a database schema accessed by multiple components, a shared file format.
+
+For each interface, record:
+1. A sequential identifier (I-001, I-002, ...).
+2. The producing component and the consuming component(s).
+3. The interface type (function call, HTTP API, event/message, database schema, file format, etc.).
+4. The operations available on this interface (list each method, endpoint, event type, or query).
+5. The data contract (parameter types, return types, schemas — or a reference to where the contract is defined).
+
+**Output:** Component Registry and Interface Registry — numbered tables of all components and all interfaces.
+
+**Step 5: Cross-Reference Verification.**
+
+Cross-reference the top-down artifacts (Entry Point Registry, Journey Registry, Scenario Registry) with the bottom-up artifacts (Component Registry, Interface Registry) to identify omissions in either direction.
+
+**5a. Journey-to-Component mapping.** For each journey, verify that every component it touches (recorded in Step 2, item 6) appears in the Component Registry. Any component referenced by a journey but missing from the registry is an omission — add it.
+
+**5b. Component-to-Journey mapping.** For each component in the Component Registry, verify that at least one journey traverses it. A component with no journey traversal is either:
+- Dead code (a finding to record).
+- An internal utility whose behavior is exercised indirectly through other components' journeys (acceptable, but the assessor must verify that the component's behavioral surface is covered by scenarios derived from those journeys).
+- A component whose entry points were missed in Step 1 (an omission — go back and add the entry points, then enumerate journeys and scenarios).
+
+**5c. Interface-to-Scenario mapping.** For each interface in the Interface Registry, verify that its operations are exercised by at least one scenario. An interface operation with no covering scenario is a gap — derive scenarios for it (functional behavior, error handling for the interface contract, boundary values for its parameters).
+
+**5d. Orphan detection.** List all components with no journey coverage and all interfaces with no scenario coverage. For each orphan, record the disposition: dead code, covered indirectly (with evidence), or omission to be remediated.
+
+**Output:** Cross-Reference Report — a document listing the journey-component mapping, component-journey mapping, interface-scenario mapping, and all orphans with dispositions.
+
+#### 4.1.3.3 Enumeration Completeness Criteria
+
+The systematic enumeration (Section 4.1.3.2) is complete when all of the following conditions are met:
+
+1. **Every applicable entry point source has been scanned** (Step 1) and the assessor has recorded which sources were checked.
+2. **Every entry point has at least one journey** (Step 2). An entry point with no journeys indicates incomplete tracing.
+3. **Every decision point in every journey has all branches represented** (Step 2). A decision point with untraced branches indicates incomplete enumeration.
+4. **Every journey has scenarios derived from all five coverage dimensions** (Step 3). A journey with scenarios in fewer than five dimensions indicates incomplete derivation — the assessor must confirm that the missing dimensions are genuinely inapplicable (not merely overlooked) and record the rationale.
+5. **Every component is accounted for** in the cross-reference (Step 5b) — either traversed by a journey, confirmed as indirectly covered, or flagged as dead code.
+6. **Every interface operation has at least one covering scenario** (Step 5c), or is explicitly recorded as an uncovered gap.
+
+The assessor must not proceed to the Scope Definition Document (Section 4.1.5) until all six conditions are met. If any condition is not met, the assessor must return to the relevant step and complete it before continuing.
+
 #### 4.1.4 Principles for Scope Determination
 
 Scope determination involves judgment. The assessor applies the following principles to maintain consistency:
@@ -193,16 +345,23 @@ Scope determination involves judgment. The assessor applies the following princi
 
 #### 4.1.5 Required Intermediate Document: Scope Definition Document
 
-The assessor must produce a **Scope Definition Document** for each component under evaluation before proceeding to coverage measurement. This document contains:
+The assessor must produce a **Scope Definition Document** for each component under evaluation before proceeding to coverage measurement. The Scope Definition Document incorporates the outputs of the Systematic Enumeration Procedure (Section 4.1.3.2). The assessor must complete all five enumeration steps and satisfy the completeness criteria (Section 4.1.3.3) before finalizing this document.
+
+This document contains:
 
 1. **Component identification.** The name, location, and boundaries of the component under assessment.
 2. **Experience inventory.** A list of every distinct user-facing experience identified for this product (Section 4.1.3.1). For each experience, record the runtime environment, deployment artifact, and the E2E test target (or an explicit statement that no E2E test target exists, which constitutes a finding). Non-user-facing components note "N/A — not a user-facing experience."
 3. **Requirements inventory.** A list of all requirements, specifications, or acceptance criteria consulted, or an explicit statement that none exist with a description of how intended behavior was inferred.
 4. **Environmental factors.** A list of environmental concerns identified as relevant to this component.
-5. **Testable scenario enumeration.** For each coverage dimension (Section 4.2), a list of every concrete testable scenario identified. For user-facing scenarios, the list must be organized by experience as the top-level grouping (Section 4.1.3.1): each scenario is filed under exactly one experience, and a user goal available through multiple experiences appears as a separate entry under each. Each entry must record the experience-specific code path. Each scenario is a single, specific, verifiable behavior (e.g., "mobile app: user signs in via react-native-keychain → native bridge → OS keychain" rather than "user signs in").
-6. **Test category coverage plan.** For each test category defined in Section 3 (unit, integration, end-to-end, contract, performance, smoke), a determination of whether that category is applicable to the component under evaluation and what scenarios it must address. If a category is not applicable, the rationale must be recorded. For E2E tests, the plan must confirm that an E2E test target exists for each identified experience; an experience with no E2E test target has zero E2E coverage by construction. This enumeration must be derived from the component's architecture and user-facing behavior, not from what test categories happen to exist in the current codebase. The absence of end-to-end tests, integration tests, or any other category in the existing suite does not exempt the assessor from evaluating whether that category is needed.
-7. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
-8. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis.
+5. **Entry Point Registry.** The numbered table of all entry points produced by Step 1 of the Systematic Enumeration Procedure (Section 4.1.3.2), including the record of which entry point sources were scanned.
+6. **Journey Registry.** The numbered table of all journeys produced by Step 2 of the Systematic Enumeration Procedure, grouped by entry point, with every decision branch covered.
+7. **Scenario Registry (testable scenario enumeration).** The numbered table of all scenarios produced by Step 3 of the Systematic Enumeration Procedure, grouped by journey and tagged by coverage dimension and experience. For user-facing scenarios, the list must be organized by experience as the top-level grouping (Section 4.1.3.1): each scenario is filed under exactly one experience, and a user goal available through multiple experiences appears as a separate entry under each. Each entry must record the experience-specific code path. Each scenario is a single, specific, verifiable behavior (e.g., "EP-012/J-003/S-007: mobile app: user signs in via react-native-keychain → native bridge → OS keychain → session token stored" rather than "user signs in").
+8. **Component Registry and Interface Registry.** The numbered tables produced by Step 4 of the Systematic Enumeration Procedure, listing all components, their responsibilities, dependencies, and all interfaces with their operations and data contracts.
+9. **Cross-Reference Report.** The report produced by Step 5 of the Systematic Enumeration Procedure, including journey-component mapping, component-journey mapping, interface-scenario mapping, and orphan dispositions.
+10. **Test category coverage plan.** For each test category defined in Section 3 (unit, integration, end-to-end, contract, performance, smoke), a determination of whether that category is applicable to the component under evaluation and what scenarios it must address. If a category is not applicable, the rationale must be recorded. For E2E tests, the plan must confirm that an E2E test target exists for each identified experience; an experience with no E2E test target has zero E2E coverage by construction. This enumeration must be derived from the component's architecture and user-facing behavior, not from what test categories happen to exist in the current codebase. The absence of end-to-end tests, integration tests, or any other category in the existing suite does not exempt the assessor from evaluating whether that category is needed.
+11. **Exclusions.** A list of behaviors or code paths explicitly excluded from scope with the rationale for each exclusion.
+12. **Source attribution.** For each scenario, an indication of whether it was derived from requirements, environment analysis, or code analysis (already recorded per-scenario in the Scenario Registry).
+13. **Enumeration completeness confirmation.** An explicit statement that all six completeness criteria (Section 4.1.3.3) have been satisfied, with evidence for each.
 
 This document is the foundation for all subsequent evaluation. Coverage ratios cannot be computed without it.
 
@@ -546,10 +705,15 @@ The assessor must produce these documents as a required part of the evaluation p
 - Experience inventory: every distinct user-facing experience, with runtime, deployment artifact, and E2E test target (Section 4.1.3.1). An experience with no E2E test target is a finding.
 - Requirements inventory: all requirements, specifications, or acceptance criteria consulted. Where none exist, an explicit statement of how intended behavior was inferred.
 - Environmental factors identified as relevant to this component.
-- Testable scenario enumeration: for each of the five coverage dimensions, a list of every concrete testable scenario. User-facing scenarios must be organized by experience as the top-level grouping—a user goal available through multiple experiences appears as a separate entry under each, with the experience-specific code path recorded. Each scenario must be specific and verifiable (e.g., "mobile app: user signs in via react-native-keychain → native bridge" rather than "user signs in").
+- Entry Point Registry: the numbered table of all entry points from Step 1 of the Systematic Enumeration Procedure (Section 4.1.3.2), including the record of which entry point sources were scanned.
+- Journey Registry: the numbered table of all journeys from Step 2, grouped by entry point, with every decision branch covered.
+- Scenario Registry (testable scenario enumeration): the numbered table of all scenarios from Step 3, grouped by journey and tagged by coverage dimension and experience. User-facing scenarios must be organized by experience as the top-level grouping—a user goal available through multiple experiences appears as a separate entry under each, with the experience-specific code path recorded. Each scenario must be specific and verifiable (e.g., "EP-012/J-003/S-007: mobile app: user signs in via react-native-keychain → native bridge → OS keychain → session token stored" rather than "user signs in").
+- Component Registry and Interface Registry: the numbered tables from Step 4, listing all components, their responsibilities, dependencies, and all interfaces with their operations and data contracts.
+- Cross-Reference Report: the report from Step 5, including journey-component mapping, component-journey mapping, interface-scenario mapping, and orphan dispositions.
 - Test category coverage plan: for each test category in Section 3, a determination of applicability and required scenarios, derived from the component's architecture and user-facing behavior—not from what test categories currently exist. For E2E tests, must confirm an E2E test target exists per experience. The absence of an entire test category in the existing suite must not be treated as evidence that the category is inapplicable.
 - Exclusions: behaviors or code paths explicitly excluded from scope, with rationale.
-- Source attribution: for each scenario, whether it was derived from requirements, environment analysis, or code analysis.
+- Source attribution: for each scenario, whether it was derived from requirements, environment analysis, or code analysis (already recorded per-scenario in the Scenario Registry).
+- Enumeration completeness confirmation: an explicit statement that all six completeness criteria (Section 4.1.3.3) have been satisfied, with evidence for each.
 
 ### 8.2 Coverage Mapping Document
 
@@ -632,7 +796,15 @@ This section defines the procedure an assessor follows when evaluating a test su
 
 The assessor executes the following phases in order. Each phase depends on the output of the preceding phase.
 
-**Phase 1: Scope Determination.** For each component under evaluation, the assessor analyzes requirements, environment, and code to identify the total possible scope. The assessor must first identify all distinct user-facing experiences (Section 4.1.3.1) and organize user-facing scenarios by experience—a user goal available through multiple experiences (e.g., sign-in on mobile vs. web) must appear as a separate scenario under each experience. The assessor must enumerate needed scenarios across all test categories defined in Section 3—including end-to-end tests—regardless of what categories currently exist in the codebase. The assessor produces the Scope Definition Document (Section 8.1), which must include the Experience Inventory (Section 8.1, item 2) and the Test Category Coverage Plan (Section 8.1, item 6). No coverage measurement occurs until this document is complete.
+**Phase 1: Scope Determination.** For each component under evaluation, the assessor executes the Systematic Enumeration Procedure (Section 4.1.3.2) in full. This procedure has five mandatory steps that must be completed in order:
+
+1. **Entry Point Inventory** (Step 1): Scan all applicable sources to produce a numbered list of every entry point. The assessor must check every source type listed in Section 4.1.3.2 and record which sources were scanned.
+2. **Journey Enumeration** (Step 2): For each entry point, trace all paths from initiation through every decision branch to every terminal state. Every decision point must have all its branches represented.
+3. **Scenario Derivation** (Step 3): For each journey, derive concrete testable scenarios by systematically applying all five coverage dimensions. Each scenario is a specific, verifiable behavioral claim with a sequential identifier.
+4. **Component and Interface Inventory** (Step 4): Independent of the journey analysis, perform a bottom-up scan of all components and their interfaces.
+5. **Cross-Reference Verification** (Step 5): Cross-reference the top-down journey artifacts with the bottom-up component artifacts to identify omissions in either direction.
+
+The assessor must verify that all six enumeration completeness criteria (Section 4.1.3.3) are satisfied before proceeding. The assessor must also identify all distinct user-facing experiences (Section 4.1.3.1), organize user-facing scenarios by experience, and enumerate needed scenarios across all test categories defined in Section 3—including end-to-end tests—regardless of what categories currently exist in the codebase. The assessor produces the Scope Definition Document (Section 8.1), which must include the Entry Point Registry, Journey Registry, Scenario Registry, Component and Interface Registries, Cross-Reference Report, Experience Inventory, and Test Category Coverage Plan. No coverage measurement occurs until this document is complete.
 
 **Phase 2: Test Classification.** The assessor classifies every existing test by its mocking profile and purpose, following the procedure in Section 3.8. Classification determines which column of the Canonical Completeness Definition Matrix (Section 4.3) applies to each test.
 
@@ -787,16 +959,31 @@ This checklist provides a single-pass verification that an assessment satisfies 
 
 ### 11.1 Scope Determination
 
-- [ ] Scope Definition Document produced for each component (Section 4.1.5, Section 8.1)
+**Systematic Enumeration (Section 4.1.3.2):**
+- [ ] Entry Point Inventory completed: all applicable sources scanned, sources-scanned record produced (Step 1)
+- [ ] Entry Point Registry produced: every entry point numbered with type, experience, file path, and identifier (Step 1)
+- [ ] Journey Enumeration completed: every entry point traced to all terminal states (Step 2)
+- [ ] Every decision point in every journey has all branches represented (Step 2)
+- [ ] Journey Registry produced: every journey numbered and grouped by entry point (Step 2)
+- [ ] Scenario Derivation completed: all five coverage dimensions applied to every journey (Step 3)
+- [ ] Scenario Registry produced: every scenario numbered, tagged by dimension and experience (Step 3)
+- [ ] Component and Interface Inventory completed bottom-up, independent of journey analysis (Step 4)
+- [ ] Component Registry and Interface Registry produced (Step 4)
+- [ ] Cross-Reference Verification completed: journey-component, component-journey, interface-scenario mappings produced (Step 5)
+- [ ] All orphans (components with no journey, interfaces with no scenario) identified and dispositioned (Step 5)
+- [ ] All six enumeration completeness criteria satisfied (Section 4.1.3.3)
+
+**Scope Definition Document (Section 4.1.5, Section 8.1):**
+- [ ] Scope Definition Document produced for each component, incorporating all enumeration artifacts
 - [ ] All distinct user-facing experiences identified, with runtime and E2E test target recorded (Section 4.1.3.1)
 - [ ] User-facing scenarios organized by experience — a user goal available through multiple experiences listed separately under each (Section 4.1.3.1)
 - [ ] Each experience-specific scenario records its own code path, not a generic description
-- [ ] Testable scenarios enumerated across all five coverage dimensions (Section 4.2)
 - [ ] Scope derived independently of existing test structure (Section 4.1.4)
-- [ ] Test Category Coverage Plan included: each test category evaluated for applicability; E2E test target confirmed per experience (Section 4.1.5, item 6)
+- [ ] Test Category Coverage Plan included: each test category evaluated for applicability; E2E test target confirmed per experience (Section 4.1.5, item 10)
 - [ ] All scenarios checked against mandatory test category rules (Section 3.7)
 - [ ] Mandatory-rule scenarios flagged with the applicable rule and required test category level
 - [ ] Exclusions recorded with rationale (Section 4.1.4)
+- [ ] Enumeration completeness confirmation included with evidence for each criterion
 
 ### 11.2 Test Classification
 
