@@ -9,7 +9,7 @@ links:
     primary: true
   - label: "Twilio Twin"
     url: "https://twilio.twins.la"
-icon: "twins.png"
+icon: "twins-la.png"
 ---
 
 ## What is it?
