@@ -1,0 +1,385 @@
+#!/usr/bin/env bash
+# distracto - persistent task reminder for terminal sessions
+# Cross-platform CLI tool: Linux, macOS, Windows (via Git Bash/WSL), SSH, tmux
+
+set -euo pipefail
+
+DISTRACTO_VERSION="1.0.0"
+DISTRACTO_STATE_DIR="${DISTRACTO_STATE_DIR:-${HOME}/.distracto}"
+DISTRACTO_SESSION_FILE="${DISTRACTO_STATE_DIR}/session_$$"
+
+# --- Helpers ---
+
+_ensure_state_dir() {
+    mkdir -p "$DISTRACTO_STATE_DIR"
+}
+
+_session_file() {
+    # Use DISTRACTO_SESSION_ID if set (for subshell persistence), else parent PID
+    # PPID is the calling shell, which stays consistent across invocations
+    local sid="${DISTRACTO_SESSION_ID:-$PPID}"
+    echo "${DISTRACTO_STATE_DIR}/session_${sid}"
+}
+
+_load_state() {
+    local sf
+    sf="$(_session_file)"
+    if [[ -f "$sf" ]]; then
+        # Source the file to load vars
+        # shellcheck disable=SC1090
+        source "$sf"
+    fi
+    # Env vars override file state
+    export DISTRACTO_PROJECT="${DISTRACTO_PROJECT:-}"
+    export DISTRACTO_GOAL="${DISTRACTO_GOAL:-}"
+    export DISTRACTO_TASK="${DISTRACTO_TASK:-}"
+}
+
+_save_state() {
+    _ensure_state_dir
+    local sf
+    sf="$(_session_file)"
+    cat > "$sf" <<STATEEOF
+DISTRACTO_PROJECT=$(printf '%q' "${DISTRACTO_PROJECT:-}")
+DISTRACTO_GOAL=$(printf '%q' "${DISTRACTO_GOAL:-}")
+DISTRACTO_TASK=$(printf '%q' "${DISTRACTO_TASK:-}")
+STATEEOF
+}
+
+_truncate() {
+    local str="$1" max="$2"
+    if (( ${#str} > max )); then
+        echo "${str:0:$((max - 1))}…"
+    else
+        echo "$str"
+    fi
+}
+
+_render_line() {
+    local proj goal task line cols
+    proj="$(_truncate "${DISTRACTO_PROJECT:-}" 10)"
+    goal="$(_truncate "${DISTRACTO_GOAL:-}" 30)"
+    task="$(_truncate "${DISTRACTO_TASK:-}" 30)"
+
+    if [[ -z "$proj" && -z "$goal" && -z "$task" ]]; then
+        return
+    fi
+
+    line="${proj}"
+    [[ -n "$goal" ]] && line="${line} | ${goal}"
+    [[ -n "$task" ]] && line="${line} | ${task}"
+
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    if (( ${#line} > cols )); then
+        line="${line:0:$((cols - 1))}…"
+    fi
+
+    echo "$line"
+}
+
+# --- Commands ---
+
+cmd_set() {
+    _load_state
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project|-p) shift; DISTRACTO_PROJECT="$1" ;;
+            --goal|-g)    shift; DISTRACTO_GOAL="$1" ;;
+            --task|-t)    shift; DISTRACTO_TASK="$1" ;;
+            *) echo "Unknown option: $1" >&2; return 1 ;;
+        esac
+        shift
+    done
+    export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
+    _save_state
+}
+
+cmd_update() {
+    _load_state
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --project|-p) shift; DISTRACTO_PROJECT="$1" ;;
+            --goal|-g)    shift; DISTRACTO_GOAL="$1" ;;
+            --task|-t)    shift; DISTRACTO_TASK="$1" ;;
+            *) echo "Unknown option: $1" >&2; return 1 ;;
+        esac
+        shift
+    done
+    export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
+    _save_state
+}
+
+cmd_clear() {
+    DISTRACTO_PROJECT=""
+    DISTRACTO_GOAL=""
+    DISTRACTO_TASK=""
+    export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
+    _save_state
+    local sf
+    sf="$(_session_file)"
+    rm -f "$sf"
+}
+
+cmd_show() {
+    _load_state
+    echo "PROJECT: ${DISTRACTO_PROJECT:-<not set>}"
+    echo "GOAL:    ${DISTRACTO_GOAL:-<not set>}"
+    echo "TASK:    ${DISTRACTO_TASK:-<not set>}"
+}
+
+cmd_export() {
+    _load_state
+    printf '{"project":"%s","goal":"%s","task":"%s"}\n' \
+        "$(echo "${DISTRACTO_PROJECT:-}" | sed 's/"/\\"/g')" \
+        "$(echo "${DISTRACTO_GOAL:-}" | sed 's/"/\\"/g')" \
+        "$(echo "${DISTRACTO_TASK:-}" | sed 's/"/\\"/g')"
+}
+
+cmd_import() {
+    _load_state
+    local json
+    json="$(cat)"
+    # Minimal JSON parsing without jq dependency
+    local val
+    val="$(echo "$json" | sed -n 's/.*"project" *: *"\([^"]*\)".*/\1/p')"
+    [[ -n "$val" ]] && DISTRACTO_PROJECT="$val"
+    val="$(echo "$json" | sed -n 's/.*"goal" *: *"\([^"]*\)".*/\1/p')"
+    [[ -n "$val" ]] && DISTRACTO_GOAL="$val"
+    val="$(echo "$json" | sed -n 's/.*"task" *: *"\([^"]*\)".*/\1/p')"
+    [[ -n "$val" ]] && DISTRACTO_TASK="$val"
+    export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
+    _save_state
+}
+
+cmd_render() {
+    # Called by shell hooks to produce the status line
+    _load_state
+    _render_line
+}
+
+cmd_init() {
+    _ensure_state_dir
+    echo "distracto init - detecting environment..."
+
+    local shell_name=""
+    local os_name=""
+
+    # Detect OS
+    case "$(uname -s)" in
+        Linux*)  os_name="linux" ;;
+        Darwin*) os_name="macos" ;;
+        CYGWIN*|MINGW*|MSYS*) os_name="windows" ;;
+        *)       os_name="unknown" ;;
+    esac
+    echo "  OS: $os_name"
+
+    # Detect shell
+    local current_shell="${SHELL:-}"
+    if [[ "$current_shell" == *"zsh"* ]]; then
+        shell_name="zsh"
+    elif [[ "$current_shell" == *"bash"* ]]; then
+        shell_name="bash"
+    else
+        shell_name="bash"  # default
+    fi
+    echo "  Shell: $shell_name"
+
+    # Resolve distracto path
+    local distracto_bin
+    distracto_bin="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+    echo "  Binary: $distracto_bin"
+
+    # Install shell hook
+    local hook_marker="# >>> distracto >>>"
+    local hook_end="# <<< distracto <<<"
+
+    _install_shell_hook() {
+        local rcfile="$1"
+        local hook_code="$2"
+
+        if [[ ! -f "$rcfile" ]]; then
+            touch "$rcfile"
+        fi
+
+        # Remove existing hook
+        if grep -q "$hook_marker" "$rcfile" 2>/dev/null; then
+            # Use sed to remove the block
+            sed -i.distracto-bak "/$hook_marker/,/$hook_end/d" "$rcfile"
+            echo "  Removed existing hook from $rcfile"
+        fi
+
+        # Append new hook
+        cat >> "$rcfile" <<HOOKEOF
+
+$hook_marker
+$hook_code
+$hook_end
+HOOKEOF
+        echo "  Installed hook in $rcfile"
+    }
+
+    # Bash hook
+    local bash_hook
+    bash_hook=$(cat <<'BASHHOOK'
+# distracto: persistent task reminder
+export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
+__distracto_prompt() {
+    local line
+    line="$(DISTRACTO_CMD render 2>/dev/null)"
+    if [[ -n "$line" ]]; then
+        # Save cursor, move to row 1, clear line, print, restore cursor
+        printf '\033[s\033[1;1H\033[K\033[7m %-*s\033[0m\033[u' "${COLUMNS:-80}" "$line"
+    fi
+}
+# Prepend to PROMPT_COMMAND
+if [[ -z "${PROMPT_COMMAND:-}" ]]; then
+    PROMPT_COMMAND="__distracto_prompt"
+else
+    PROMPT_COMMAND="__distracto_prompt;${PROMPT_COMMAND}"
+fi
+# Reserve top line via scroll margin
+printf '\033[2;%dr' "${LINES:-24}"
+BASHHOOK
+)
+    bash_hook="${bash_hook//DISTRACTO_CMD/$distracto_bin}"
+
+    # Zsh hook
+    local zsh_hook
+    zsh_hook=$(cat <<'ZSHHOOK'
+# distracto: persistent task reminder
+export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
+__distracto_precmd() {
+    local line
+    line="$(DISTRACTO_CMD render 2>/dev/null)"
+    if [[ -n "$line" ]]; then
+        local cols="${COLUMNS:-80}"
+        printf '\033[s\033[1;1H\033[K\033[7m %-*s\033[0m\033[u' "$cols" "$line"
+    fi
+}
+autoload -Uz add-zsh-hook
+add-zsh-hook precmd __distracto_precmd
+printf '\033[2;%dr' "${LINES:-24}"
+ZSHHOOK
+)
+    zsh_hook="${zsh_hook//DISTRACTO_CMD/$distracto_bin}"
+
+    case "$shell_name" in
+        bash)
+            _install_shell_hook "${HOME}/.bashrc" "$bash_hook"
+            ;;
+        zsh)
+            _install_shell_hook "${HOME}/.zshrc" "$zsh_hook"
+            ;;
+    esac
+
+    # Also install bash hook if .bashrc exists and shell is zsh (for SSH fallback)
+    if [[ "$shell_name" == "zsh" && -f "${HOME}/.bashrc" ]]; then
+        _install_shell_hook "${HOME}/.bashrc" "$bash_hook"
+    fi
+
+    # tmux integration
+    if command -v tmux &>/dev/null; then
+        local tmux_conf="${HOME}/.tmux.conf"
+        if [[ ! -f "$tmux_conf" ]]; then
+            touch "$tmux_conf"
+        fi
+
+        if grep -q "$hook_marker" "$tmux_conf" 2>/dev/null; then
+            sed -i.distracto-bak "/$hook_marker/,/$hook_end/d" "$tmux_conf"
+        fi
+
+        cat >> "$tmux_conf" <<TMUXEOF
+
+$hook_marker
+set-option -g status-position top
+set-option -g status-interval 5
+set-option -g status-left-length 80
+set-option -g status-left '#(${distracto_bin} render 2>/dev/null) '
+set-option -g status-style 'bg=colour235,fg=colour250'
+$hook_end
+TMUXEOF
+        echo "  Installed tmux status bar config in $tmux_conf"
+    fi
+
+    # PowerShell profile (for WSL/cross-platform)
+    _install_powershell() {
+        local ps_profile_dir="${HOME}/.config/powershell"
+        local ps_profile="${ps_profile_dir}/Microsoft.PowerShell_profile.ps1"
+        if [[ -d "$ps_profile_dir" ]] || [[ "$os_name" == "windows" ]]; then
+            mkdir -p "$ps_profile_dir"
+            local ps_hook
+            ps_hook=$(cat <<PSHOOK
+$hook_marker
+# distracto: persistent task reminder
+\$env:DISTRACTO_SESSION_ID = if (\$env:DISTRACTO_SESSION_ID) { \$env:DISTRACTO_SESSION_ID } else { \$PID }
+function prompt {
+    \$line = & "${distracto_bin}" render 2>\$null
+    if (\$line) {
+        Write-Host -NoNewline "\e[s\e[1;1H\e[K\e[7m \$(\$line.PadRight(\$Host.UI.RawUI.WindowSize.Width))\e[0m\e[u"
+    }
+    return "PS> "
+}
+[Console]::Write("\e[2;\$(\$Host.UI.RawUI.WindowSize.Height)r")
+$hook_end
+PSHOOK
+)
+            if [[ -f "$ps_profile" ]] && grep -q "$hook_marker" "$ps_profile" 2>/dev/null; then
+                sed -i.distracto-bak "/$hook_marker/,/$hook_end/d" "$ps_profile"
+            fi
+            echo "$ps_hook" >> "$ps_profile"
+            echo "  Installed PowerShell profile hook in $ps_profile"
+        fi
+    }
+    _install_powershell
+
+    # Add to PATH if not already there
+    local bin_dir
+    bin_dir="$(dirname "$distracto_bin")"
+    if [[ ":${PATH}:" != *":${bin_dir}:"* ]]; then
+        echo ""
+        echo "  Add to your PATH:"
+        echo "    export PATH=\"${bin_dir}:\$PATH\""
+    fi
+
+    # Cleanup old session files (older than 7 days)
+    find "$DISTRACTO_STATE_DIR" -name 'session_*' -mtime +7 -delete 2>/dev/null || true
+
+    echo ""
+    echo "distracto initialized successfully!"
+    echo "Restart your shell or run: source ~/.${shell_name}rc"
+}
+
+# --- Main ---
+
+case "${1:-help}" in
+    init)     cmd_init ;;
+    set)      shift; cmd_set "$@" ;;
+    update)   shift; cmd_update "$@" ;;
+    clear)    cmd_clear ;;
+    show)     cmd_show ;;
+    export)   cmd_export ;;
+    import)   cmd_import ;;
+    render)   cmd_render ;;
+    version)  echo "distracto $DISTRACTO_VERSION" ;;
+    help|--help|-h)
+        cat <<USAGE
+distracto $DISTRACTO_VERSION - persistent task reminder for terminal sessions
+
+Usage:
+  distracto init                          Setup for current environment
+  distracto set -p <proj> -g <goal> -t <task>  Set all values
+  distracto update [-p <proj>] [-g <goal>] [-t <task>]  Partial update
+  distracto clear                         Clear all values
+  distracto show                          Display current values
+  distracto export                        Output values as JSON
+  distracto import                        Read JSON from stdin and apply
+  distracto render                        Output the status line (used by hooks)
+  distracto version                       Show version
+USAGE
+        ;;
+    *)
+        echo "Unknown command: $1" >&2
+        echo "Run 'distracto help' for usage." >&2
+        exit 1
+        ;;
+esac
