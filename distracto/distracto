@@ -276,12 +276,13 @@ __distracto_prompt() {
     local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
     rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
-    # Re-assert scroll region each prompt (resize/clear/etc can reset DECSTBM)
-    printf '\033[2;%dr' "$rows"
+    # Save cursor BEFORE DECSTBM (which homes the cursor on xterm/vte),
+    # re-assert scroll region, draw bar at (1,1), restore cursor last.
+    printf '\033[s\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
-        # Blue bg, \e[K fills rest of row with bg; $line carries its own fg colors
-        printf '\033[s\033[1;1H\033[48;5;17m\033[K %s\033[0m\033[u' "$line"
+        printf '\033[1;1H\033[48;5;17m\033[K %s\033[0m' "$line"
     fi
+    printf '\033[u'
 }
 # Prepend to PROMPT_COMMAND
 if [[ -z "${PROMPT_COMMAND:-}" ]]; then
@@ -304,10 +305,11 @@ __distracto_precmd() {
     local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
     rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
-    printf '\033[2;%dr' "$rows"
+    printf '\033[s\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
-        printf '\033[s\033[1;1H\033[48;5;17m\033[K %s\033[0m\033[u' "$line"
+        printf '\033[1;1H\033[48;5;17m\033[K %s\033[0m' "$line"
     fi
+    printf '\033[u'
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __distracto_precmd

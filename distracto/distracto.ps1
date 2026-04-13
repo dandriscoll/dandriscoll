@@ -242,11 +242,13 @@ function global:__distracto_render {
 function global:prompt {
     `$line = __distracto_render
     `$rows = `$Host.UI.RawUI.WindowSize.Height
-    # Re-assert scroll region each prompt (resize/Clear-Host can reset DECSTBM)
-    Write-Host -NoNewline "`e[2;`${rows}r"
+    # Save cursor BEFORE DECSTBM (homes cursor on xterm/vte), re-assert
+    # scroll region, draw bar at (1,1), restore cursor last.
+    Write-Host -NoNewline "`e[s`e[2;`${rows}r"
     if (`$line) {
-        Write-Host -NoNewline "`e[s`e[1;1H`e[48;5;17m`e[K `$line`e[0m`e[u"
+        Write-Host -NoNewline "`e[1;1H`e[48;5;17m`e[K `$line`e[0m"
     }
+    Write-Host -NoNewline "`e[u"
     "PS `$(`$executionContext.SessionState.Path.CurrentLocation)`$('>' * (`$nestedPromptLevel + 1)) "
 }
 
