@@ -56,55 +56,104 @@ _truncate() {
 }
 
 _render_line() {
-    local proj goal task line cols
-    proj="$(_truncate "${DISTRACTO_PROJECT:-}" 10)"
-    goal="$(_truncate "${DISTRACTO_GOAL:-}" 30)"
-    task="$(_truncate "${DISTRACTO_TASK:-}" 30)"
+    local proj goal task plain colored cols esc
+    proj="${DISTRACTO_PROJECT:-}"
+    goal="${DISTRACTO_GOAL:-}"
+    task="${DISTRACTO_TASK:-}"
 
     if [[ -z "$proj" && -z "$goal" && -z "$task" ]]; then
         return
     fi
 
-    line="${proj}"
-    [[ -n "$goal" ]] && line="${line} | ${goal}"
-    [[ -n "$task" ]] && line="${line} | ${task}"
+    proj="$(_truncate "$proj" 10)"
+    goal="$(_truncate "$goal" 30)"
+    task="$(_truncate "$task" 30)"
 
-    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
-    if (( ${#line} > cols )); then
-        line="${line:0:$((cols - 1))}…"
+    esc=$'\033'
+    local cProj="${esc}[1;38;5;81m"     # bold light cyan
+    local cGoal="${esc}[38;5;222m"      # soft yellow
+    local cTask="${esc}[38;5;156m"      # light green
+    local cSep="${esc}[38;5;244m"       # dim gray
+    local fgReset="${esc}[39m"          # default fg, preserves bg
+
+    plain=""
+    colored=""
+    if [[ -n "$proj" ]]; then
+        colored="${cProj}${proj}${fgReset}"
+        plain="$proj"
+    fi
+    if [[ -n "$goal" ]]; then
+        if [[ -n "$plain" ]]; then
+            colored="${colored}${cSep} | ${fgReset}"
+            plain="${plain} | "
+        fi
+        colored="${colored}${cGoal}${goal}${fgReset}"
+        plain="${plain}${goal}"
+    fi
+    if [[ -n "$task" ]]; then
+        if [[ -n "$plain" ]]; then
+            colored="${colored}${cSep} | ${fgReset}"
+            plain="${plain} | "
+        fi
+        colored="${colored}${cTask}${task}${fgReset}"
+        plain="${plain}${task}"
     fi
 
-    echo "$line"
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    if (( ${#plain} > cols - 1 )); then
+        echo "${plain:0:$((cols - 2))}…"
+    else
+        echo "$colored"
+    fi
 }
 
 # --- Commands ---
 
-cmd_set() {
-    _load_state
-    while [[ $# -gt 0 ]]; do
+_parse_flag_args() {
+    _PARSED_HAS_PROJECT=0; _PARSED_PROJECT=""
+    _PARSED_HAS_GOAL=0;    _PARSED_GOAL=""
+    _PARSED_HAS_TASK=0;    _PARSED_TASK=""
+    local key=""
+    while (( $# > 0 )); do
         case "$1" in
-            --project|-p) shift; DISTRACTO_PROJECT="$1" ;;
-            --goal|-g)    shift; DISTRACTO_GOAL="$1" ;;
-            --task|-t)    shift; DISTRACTO_TASK="$1" ;;
-            *) echo "Unknown option: $1" >&2; return 1 ;;
+            --project|-p) key="project"; _PARSED_HAS_PROJECT=1 ;;
+            --goal|-g)    key="goal";    _PARSED_HAS_GOAL=1 ;;
+            --task|-t)    key="task";    _PARSED_HAS_TASK=1 ;;
+            *)
+                if [[ -z "$key" ]]; then
+                    echo "Unknown option: $1" >&2
+                    return 1
+                fi
+                case "$key" in
+                    project) _PARSED_PROJECT="${_PARSED_PROJECT:+$_PARSED_PROJECT }$1" ;;
+                    goal)    _PARSED_GOAL="${_PARSED_GOAL:+$_PARSED_GOAL }$1" ;;
+                    task)    _PARSED_TASK="${_PARSED_TASK:+$_PARSED_TASK }$1" ;;
+                esac
+                ;;
         esac
         shift
     done
+}
+
+cmd_set() {
+    _load_state
+    _parse_flag_args "$@" || return 1
+    (( _PARSED_HAS_PROJECT )) && DISTRACTO_PROJECT="$_PARSED_PROJECT"
+    (( _PARSED_HAS_GOAL ))    && DISTRACTO_GOAL="$_PARSED_GOAL"
+    (( _PARSED_HAS_TASK ))    && DISTRACTO_TASK="$_PARSED_TASK"
     export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
     _save_state
 }
 
-cmd_update() {
+cmd_update() { cmd_set "$@"; }
+
+cmd_done() {
     _load_state
-    while [[ $# -gt 0 ]]; do
-        case "$1" in
-            --project|-p) shift; DISTRACTO_PROJECT="$1" ;;
-            --goal|-g)    shift; DISTRACTO_GOAL="$1" ;;
-            --task|-t)    shift; DISTRACTO_TASK="$1" ;;
-            *) echo "Unknown option: $1" >&2; return 1 ;;
-        esac
-        shift
-    done
+    if (( $# > 0 )); then
+        DISTRACTO_TASK="$*"
+    else
+        DISTRACTO_TASK=""
+    fi
     export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
     _save_state
 }
@@ -224,11 +273,14 @@ HOOKEOF
 # distracto: persistent task reminder
 export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
 __distracto_prompt() {
-    local line
+    local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
+    rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
+    # Re-assert scroll region each prompt (resize/clear/etc can reset DECSTBM)
+    printf '\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
-        # Save cursor, move to row 1, clear line, print, restore cursor
-        printf '\033[s\033[1;1H\033[K\033[7m %-*s\033[0m\033[u' "${COLUMNS:-80}" "$line"
+        # Blue bg, \e[K fills rest of row with bg; $line carries its own fg colors
+        printf '\033[s\033[1;1H\033[48;5;17m\033[K %s\033[0m\033[u' "$line"
     fi
 }
 # Prepend to PROMPT_COMMAND
@@ -237,8 +289,8 @@ if [[ -z "${PROMPT_COMMAND:-}" ]]; then
 else
     PROMPT_COMMAND="__distracto_prompt;${PROMPT_COMMAND}"
 fi
-# Reserve top line via scroll margin
-printf '\033[2;%dr' "${LINES:-24}"
+# Clear screen, reserve top line, park cursor below bar
+printf '\033[2J\033[H\033[2;%dr\033[2;1H' "${LINES:-24}"
 BASHHOOK
 )
     bash_hook="${bash_hook//DISTRACTO_CMD/$distracto_bin}"
@@ -249,16 +301,17 @@ BASHHOOK
 # distracto: persistent task reminder
 export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
 __distracto_precmd() {
-    local line
+    local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
+    rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
+    printf '\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
-        local cols="${COLUMNS:-80}"
-        printf '\033[s\033[1;1H\033[K\033[7m %-*s\033[0m\033[u' "$cols" "$line"
+        printf '\033[s\033[1;1H\033[48;5;17m\033[K %s\033[0m\033[u' "$line"
     fi
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __distracto_precmd
-printf '\033[2;%dr' "${LINES:-24}"
+printf '\033[2J\033[H\033[2;%dr\033[2;1H' "${LINES:-24}"
 ZSHHOOK
 )
     zsh_hook="${zsh_hook//DISTRACTO_CMD/$distracto_bin}"
@@ -355,6 +408,7 @@ case "${1:-help}" in
     init)     cmd_init ;;
     set)      shift; cmd_set "$@" ;;
     update)   shift; cmd_update "$@" ;;
+    done)     shift; cmd_done "$@" ;;
     clear)    cmd_clear ;;
     show)     cmd_show ;;
     export)   cmd_export ;;
@@ -365,10 +419,13 @@ case "${1:-help}" in
         cat <<USAGE
 distracto $DISTRACTO_VERSION - persistent task reminder for terminal sessions
 
+Values may span multiple tokens; quoting is optional.
+
 Usage:
   distracto init                          Setup for current environment
   distracto set -p <proj> -g <goal> -t <task>  Set all values
   distracto update [-p <proj>] [-g <goal>] [-t <task>]  Partial update
+  distracto done [<next task>...]         Clear task (or replace with next)
   distracto clear                         Clear all values
   distracto show                          Display current values
   distracto export                        Output values as JSON
