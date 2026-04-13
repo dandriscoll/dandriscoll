@@ -8,7 +8,9 @@ INSTALL_DIR="${HOME}/.local/bin"
 
 mkdir -p "$INSTALL_DIR"
 
-cp "${REPO_DIR}/distracto/distracto" "${INSTALL_DIR}/distracto"
+# Strip CR during copy so a CRLF-checked-out source (Windows autocrlf,
+# /mnt/c mount, etc.) still produces a bash-runnable installed file.
+tr -d '\r' < "${REPO_DIR}/distracto/distracto" > "${INSTALL_DIR}/distracto"
 chmod +x "${INSTALL_DIR}/distracto"
 
 echo "Installed distracto to ${INSTALL_DIR}/distracto"
