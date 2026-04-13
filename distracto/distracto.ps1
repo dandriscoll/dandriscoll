@@ -48,11 +48,15 @@ function Truncate-String([string]$str, [int]$max) {
 }
 
 function Render-Line {
-    $proj = Truncate-String (if ($env:DISTRACTO_PROJECT) { $env:DISTRACTO_PROJECT } else { "" }) 10
-    $goal = Truncate-String (if ($env:DISTRACTO_GOAL) { $env:DISTRACTO_GOAL } else { "" }) 30
-    $task = Truncate-String (if ($env:DISTRACTO_TASK) { $env:DISTRACTO_TASK } else { "" }) 30
+    $proj = if ($env:DISTRACTO_PROJECT) { $env:DISTRACTO_PROJECT } else { "" }
+    $goal = if ($env:DISTRACTO_GOAL) { $env:DISTRACTO_GOAL } else { "" }
+    $task = if ($env:DISTRACTO_TASK) { $env:DISTRACTO_TASK } else { "" }
 
     if (-not $proj -and -not $goal -and -not $task) { return "" }
+
+    $proj = Truncate-String $proj 10
+    $goal = Truncate-String $goal 30
+    $task = Truncate-String $task 30
 
     $line = $proj
     if ($goal) { $line += " | $goal" }
@@ -194,13 +198,13 @@ function global:prompt {
         `$padded = `$line.PadRight(`$cols)
         Write-Host -NoNewline "`e[s`e[1;1H`e[K`e[7m `$padded`e[0m`e[u"
     }
-    return "PS> "
+    "PS `$(`$executionContext.SessionState.Path.CurrentLocation)`$('>' * (`$nestedPromptLevel + 1)) "
 }
 
-# Set scroll margin to reserve top line
+# Clear screen, set scroll margin to reserve top line, park cursor below bar
 try {
     `$rows = `$Host.UI.RawUI.WindowSize.Height
-    Write-Host -NoNewline "`e[2;`${rows}r"
+    Write-Host -NoNewline "`e[2J`e[H`e[2;`${rows}r`e[2;1H"
 } catch {}
 $endMarker
 "@
