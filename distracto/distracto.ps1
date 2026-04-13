@@ -215,7 +215,7 @@ $endMarker
 
     Write-Host ""
     Write-Host "distracto initialized successfully!"
-    Write-Host "Restart your PowerShell session or run: . `$PROFILE"
+    Write-Host "Restart your PowerShell session or run: . '$profilePath'"
 }
 
 function Cmd-Help {
