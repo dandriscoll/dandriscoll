@@ -58,15 +58,30 @@ function Render-Line {
     $goal = Truncate-String $goal 30
     $task = Truncate-String $task 30
 
-    $line = $proj
-    if ($goal) { $line += " | $goal" }
-    if ($task) { $line += " | $task" }
+    $esc      = [char]27
+    $cProj    = "$esc[1;38;5;81m"   # bold light cyan
+    $cGoal    = "$esc[38;5;222m"    # soft yellow
+    $cTask    = "$esc[38;5;156m"    # light green
+    $cSep     = "$esc[38;5;244m"    # dim gray
+    $fgReset  = "$esc[39m"          # default fg, preserves bg
+
+    $colored = ""
+    $plain = ""
+    if ($proj) { $colored += "$cProj$proj$fgReset"; $plain += $proj }
+    if ($goal) {
+        if ($plain) { $colored += "$cSep | $fgReset"; $plain += " | " }
+        $colored += "$cGoal$goal$fgReset"; $plain += $goal
+    }
+    if ($task) {
+        if ($plain) { $colored += "$cSep | $fgReset"; $plain += " | " }
+        $colored += "$cTask$task$fgReset"; $plain += $task
+    }
 
     $cols = $Host.UI.RawUI.WindowSize.Width
-    if ($cols -and $line.Length -gt $cols) {
-        $line = $line.Substring(0, $cols - 1) + [char]0x2026
+    if ($cols -and $plain.Length -gt $cols - 1) {
+        return $plain.Substring(0, $cols - 2) + [char]0x2026
     }
-    return $line
+    return $colored
 }
 
 # --- Commands ---
@@ -193,10 +208,11 @@ function global:__distracto_render {
 
 function global:prompt {
     `$line = __distracto_render
+    `$rows = `$Host.UI.RawUI.WindowSize.Height
+    # Re-assert scroll region each prompt (resize/Clear-Host can reset DECSTBM)
+    Write-Host -NoNewline "`e[2;`${rows}r"
     if (`$line) {
-        `$cols = `$Host.UI.RawUI.WindowSize.Width
-        `$padded = `$line.PadRight(`$cols)
-        Write-Host -NoNewline "`e[s`e[1;1H`e[K`e[7m `$padded`e[0m`e[u"
+        Write-Host -NoNewline "`e[s`e[1;1H`e[48;5;17m`e[K `$line`e[0m`e[u"
     }
     "PS `$(`$executionContext.SessionState.Path.CurrentLocation)`$('>' * (`$nestedPromptLevel + 1)) "
 }
