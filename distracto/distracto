@@ -56,7 +56,7 @@ _truncate() {
 }
 
 _render_line() {
-    local proj goal task plain colored cols esc
+    local proj goal task colored cols esc
     proj="${DISTRACTO_PROJECT:-}"
     goal="${DISTRACTO_GOAL:-}"
     task="${DISTRACTO_TASK:-}"
@@ -65,9 +65,31 @@ _render_line() {
         return
     fi
 
-    proj="$(_truncate "$proj" 10)"
-    goal="$(_truncate "$goal" 30)"
-    task="$(_truncate "$task" 30)"
+    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
+    local count=0
+    [[ -n "$proj" ]] && ((count++))
+    [[ -n "$goal" ]] && ((count++))
+    [[ -n "$task" ]] && ((count++))
+    local seps=$(( count > 0 ? count - 1 : 0 ))
+    local budget=$(( cols - 2 - seps * 3 ))
+    (( budget < 1 )) && budget=1
+
+    # Shrink the longest field one char at a time until the total fits.
+    # Naturally lets a short project donate space to a long task.
+    local lp=${#proj} lg=${#goal} lt=${#task}
+    while (( lp + lg + lt > budget )); do
+        if (( lp >= lg && lp >= lt )); then
+            ((lp--))
+        elif (( lg >= lt )); then
+            ((lg--))
+        else
+            ((lt--))
+        fi
+        (( lp + lg + lt <= 0 )) && break
+    done
+    proj="${proj:0:$lp}"
+    goal="${goal:0:$lg}"
+    task="${task:0:$lt}"
 
     esc=$'\033'
     local cProj="${esc}[1;38;5;81m"     # bold light cyan
@@ -76,35 +98,20 @@ _render_line() {
     local cSep="${esc}[38;5;244m"       # dim gray
     local fgReset="${esc}[39m"          # default fg, preserves bg
 
-    plain=""
     colored=""
     if [[ -n "$proj" ]]; then
         colored="${cProj}${proj}${fgReset}"
-        plain="$proj"
     fi
     if [[ -n "$goal" ]]; then
-        if [[ -n "$plain" ]]; then
-            colored="${colored}${cSep} | ${fgReset}"
-            plain="${plain} | "
-        fi
+        [[ -n "$colored" ]] && colored="${colored}${cSep} | ${fgReset}"
         colored="${colored}${cGoal}${goal}${fgReset}"
-        plain="${plain}${goal}"
     fi
     if [[ -n "$task" ]]; then
-        if [[ -n "$plain" ]]; then
-            colored="${colored}${cSep} | ${fgReset}"
-            plain="${plain} | "
-        fi
+        [[ -n "$colored" ]] && colored="${colored}${cSep} | ${fgReset}"
         colored="${colored}${cTask}${task}${fgReset}"
-        plain="${plain}${task}"
     fi
 
-    cols="${COLUMNS:-$(tput cols 2>/dev/null || echo 80)}"
-    if (( ${#plain} > cols - 1 )); then
-        echo "${plain:0:$((cols - 2))}…"
-    else
-        echo "$colored"
-    fi
+    echo "$colored"
 }
 
 # --- Commands ---
@@ -272,17 +279,26 @@ HOOKEOF
     bash_hook=$(cat <<'BASHHOOK'
 # distracto: persistent task reminder
 export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
-__distracto_prompt() {
+__distracto_draw_bar() {
     local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
     rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
-    # Save cursor BEFORE DECSTBM (which homes the cursor on xterm/vte),
-    # re-assert scroll region, draw bar at (1,1), restore cursor last.
-    printf '\033[s\033[2;%dr' "$rows"
+    printf '\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
         printf '\033[1;1H\033[48;5;17m\033[K %s\033[0m' "$line"
     fi
+}
+__distracto_prompt() {
+    # Save cursor BEFORE DECSTBM (which homes the cursor on xterm/vte),
+    # draw the bar, restore cursor last.
+    printf '\033[s'
+    __distracto_draw_bar
     printf '\033[u'
+}
+clear() {
+    command clear
+    __distracto_draw_bar
+    printf '\033[2;1H'
 }
 # Prepend to PROMPT_COMMAND
 if [[ -z "${PROMPT_COMMAND:-}" ]]; then
@@ -301,15 +317,24 @@ BASHHOOK
     zsh_hook=$(cat <<'ZSHHOOK'
 # distracto: persistent task reminder
 export DISTRACTO_SESSION_ID="${DISTRACTO_SESSION_ID:-$$}"
-__distracto_precmd() {
+__distracto_draw_bar() {
     local line rows
     line="$(DISTRACTO_CMD render 2>/dev/null)"
     rows="${LINES:-$(tput lines 2>/dev/null || echo 24)}"
-    printf '\033[s\033[2;%dr' "$rows"
+    printf '\033[2;%dr' "$rows"
     if [[ -n "$line" ]]; then
         printf '\033[1;1H\033[48;5;17m\033[K %s\033[0m' "$line"
     fi
+}
+__distracto_precmd() {
+    printf '\033[s'
+    __distracto_draw_bar
     printf '\033[u'
+}
+clear() {
+    command clear
+    __distracto_draw_bar
+    printf '\033[2;1H'
 }
 autoload -Uz add-zsh-hook
 add-zsh-hook precmd __distracto_precmd

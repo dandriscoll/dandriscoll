@@ -54,9 +54,32 @@ function Render-Line {
 
     if (-not $proj -and -not $goal -and -not $task) { return "" }
 
-    $proj = Truncate-String $proj 10
-    $goal = Truncate-String $goal 30
-    $task = Truncate-String $task 30
+    $cols = $Host.UI.RawUI.WindowSize.Width
+    if (-not $cols -or $cols -lt 1) { $cols = 80 }
+
+    $count = 0
+    if ($proj) { $count++ }
+    if ($goal) { $count++ }
+    if ($task) { $count++ }
+    $seps = if ($count -gt 0) { $count - 1 } else { 0 }
+    $budget = $cols - 2 - ($seps * 3)
+    if ($budget -lt 1) { $budget = 1 }
+
+    # Shrink the longest field one char at a time until the total fits.
+    # A short project donates space to a long task without fixed caps.
+    $lp = $proj.Length; $lg = $goal.Length; $lt = $task.Length
+    while ($lp + $lg + $lt -gt $budget) {
+        if ($lp -ge $lg -and $lp -ge $lt)      { $lp-- }
+        elseif ($lg -ge $lt)                   { $lg-- }
+        else                                   { $lt-- }
+        if ($lp + $lg + $lt -le 0) { break }
+    }
+    if ($lp -lt 0) { $lp = 0 }
+    if ($lg -lt 0) { $lg = 0 }
+    if ($lt -lt 0) { $lt = 0 }
+    $proj = $proj.Substring(0, $lp)
+    $goal = $goal.Substring(0, $lg)
+    $task = $task.Substring(0, $lt)
 
     $esc      = [char]27
     $cProj    = "$esc[1;38;5;81m"   # bold light cyan
@@ -66,20 +89,14 @@ function Render-Line {
     $fgReset  = "$esc[39m"          # default fg, preserves bg
 
     $colored = ""
-    $plain = ""
-    if ($proj) { $colored += "$cProj$proj$fgReset"; $plain += $proj }
+    if ($proj) { $colored += "$cProj$proj$fgReset" }
     if ($goal) {
-        if ($plain) { $colored += "$cSep | $fgReset"; $plain += " | " }
-        $colored += "$cGoal$goal$fgReset"; $plain += $goal
+        if ($colored) { $colored += "$cSep | $fgReset" }
+        $colored += "$cGoal$goal$fgReset"
     }
     if ($task) {
-        if ($plain) { $colored += "$cSep | $fgReset"; $plain += " | " }
-        $colored += "$cTask$task$fgReset"; $plain += $task
-    }
-
-    $cols = $Host.UI.RawUI.WindowSize.Width
-    if ($cols -and $plain.Length -gt $cols - 1) {
-        return $plain.Substring(0, $cols - 2) + [char]0x2026
+        if ($colored) { $colored += "$cSep | $fgReset" }
+        $colored += "$cTask$task$fgReset"
     }
     return $colored
 }
@@ -236,21 +253,33 @@ function global:__distracto_render {
     & "$distractoBin" render 2>`$null
 }
 
+function global:__distracto_draw_bar {
+    `$line = __distracto_render
+    `$rows = `$Host.UI.RawUI.WindowSize.Height
+    Write-Host -NoNewline "`e[2;`${rows}r"
+    if (`$line) {
+        Write-Host -NoNewline "`e[1;1H`e[48;5;17m`e[K `$line`e[0m"
+    }
+}
+
 # Override prompt to include status line
 `$global:__distracto_original_prompt = if (Test-Path Function:\prompt) { Get-Content Function:\prompt } else { `$null }
 
 function global:prompt {
-    `$line = __distracto_render
-    `$rows = `$Host.UI.RawUI.WindowSize.Height
-    # Save cursor BEFORE DECSTBM (homes cursor on xterm/vte), re-assert
-    # scroll region, draw bar at (1,1), restore cursor last.
-    Write-Host -NoNewline "`e[s`e[2;`${rows}r"
-    if (`$line) {
-        Write-Host -NoNewline "`e[1;1H`e[48;5;17m`e[K `$line`e[0m"
-    }
+    # Save cursor BEFORE DECSTBM (homes cursor on xterm/vte), draw bar,
+    # restore cursor last.
+    Write-Host -NoNewline "`e[s"
+    __distracto_draw_bar
     Write-Host -NoNewline "`e[u"
     "PS `$(`$executionContext.SessionState.Path.CurrentLocation)`$('>' * (`$nestedPromptLevel + 1)) "
 }
+
+function global:Clear-Host {
+    [Console]::Write("`e[2J`e[H")
+    __distracto_draw_bar
+    Write-Host -NoNewline "`e[2;1H"
+}
+Set-Alias -Name cls -Value Clear-Host -Scope Global -Option AllScope -Force
 
 # Clear screen, set scroll margin to reserve top line, park cursor below bar
 try {
