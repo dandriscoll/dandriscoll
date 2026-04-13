@@ -86,30 +86,63 @@ function Render-Line {
 
 # --- Commands ---
 
+$script:DistractoFlagMap = @{
+    "-p" = "project"; "--project" = "project"
+    "-g" = "goal";    "--goal"    = "goal"
+    "-t" = "task";    "--task"    = "task"
+}
+
+function Parse-FlagArguments {
+    param([string[]]$Arguments)
+    $result = @{}
+    $i = 0
+    while ($i -lt $Arguments.Count) {
+        $flag = $Arguments[$i]
+        if (-not $script:DistractoFlagMap.ContainsKey($flag)) {
+            throw "Unknown option: $flag"
+        }
+        $key = $script:DistractoFlagMap[$flag]
+        $i++
+        $values = @()
+        while ($i -lt $Arguments.Count -and -not $script:DistractoFlagMap.ContainsKey($Arguments[$i])) {
+            $values += $Arguments[$i]
+            $i++
+        }
+        $result[$key] = ($values -join " ")
+    }
+    return $result
+}
+
+function Apply-ParsedArguments {
+    param([hashtable]$Parsed)
+    if ($Parsed.ContainsKey("project")) { $env:DISTRACTO_PROJECT = $Parsed["project"] }
+    if ($Parsed.ContainsKey("goal"))    { $env:DISTRACTO_GOAL    = $Parsed["goal"]    }
+    if ($Parsed.ContainsKey("task"))    { $env:DISTRACTO_TASK    = $Parsed["task"]    }
+}
+
 function Cmd-Set {
     param([string[]]$Arguments)
     Load-State
-    for ($i = 0; $i -lt $Arguments.Count; $i++) {
-        switch ($Arguments[$i]) {
-            { $_ -in "--project", "-p" } { $i++; $env:DISTRACTO_PROJECT = $Arguments[$i] }
-            { $_ -in "--goal", "-g" }    { $i++; $env:DISTRACTO_GOAL = $Arguments[$i] }
-            { $_ -in "--task", "-t" }    { $i++; $env:DISTRACTO_TASK = $Arguments[$i] }
-            default { Write-Error "Unknown option: $($Arguments[$i])"; return }
-        }
-    }
+    try { $parsed = Parse-FlagArguments $Arguments } catch { Write-Error $_.Exception.Message; return }
+    Apply-ParsedArguments $parsed
     Save-State
 }
 
 function Cmd-Update {
     param([string[]]$Arguments)
     Load-State
-    for ($i = 0; $i -lt $Arguments.Count; $i++) {
-        switch ($Arguments[$i]) {
-            { $_ -in "--project", "-p" } { $i++; $env:DISTRACTO_PROJECT = $Arguments[$i] }
-            { $_ -in "--goal", "-g" }    { $i++; $env:DISTRACTO_GOAL = $Arguments[$i] }
-            { $_ -in "--task", "-t" }    { $i++; $env:DISTRACTO_TASK = $Arguments[$i] }
-            default { Write-Error "Unknown option: $($Arguments[$i])"; return }
-        }
+    try { $parsed = Parse-FlagArguments $Arguments } catch { Write-Error $_.Exception.Message; return }
+    Apply-ParsedArguments $parsed
+    Save-State
+}
+
+function Cmd-Done {
+    param([string[]]$Arguments)
+    Load-State
+    if ($Arguments.Count -gt 0) {
+        $env:DISTRACTO_TASK = ($Arguments -join " ")
+    } else {
+        $env:DISTRACTO_TASK = ""
     }
     Save-State
 }
@@ -242,10 +275,13 @@ function Cmd-Help {
     Write-Output @"
 distracto $DistractoVersion - persistent task reminder for terminal sessions
 
+Values may span multiple tokens; quoting is optional.
+
 Usage:
   distracto init                                    Setup for current environment
   distracto set -p <proj> -g <goal> -t <task>       Set all values
   distracto update [-p <proj>] [-g <goal>] [-t <task>]  Partial update
+  distracto done [<next task>...]                   Clear task (or replace with next)
   distracto clear                                   Clear all values
   distracto show                                    Display current values
   distracto export                                  Output values as JSON
@@ -264,6 +300,7 @@ switch ($command) {
     "init"    { Cmd-Init }
     "set"     { Cmd-Set -Arguments $remaining }
     "update"  { Cmd-Update -Arguments $remaining }
+    "done"    { Cmd-Done -Arguments $remaining }
     "clear"   { Cmd-Clear }
     "show"    { Cmd-Show }
     "export"  { Cmd-Export }
