@@ -9,7 +9,9 @@
    - `subCode` — a stable error ID (e.g. `ACCOUNT_ALREADY_EXISTS`), or null if none applies.
    - `message` — a map of language identifier to localized message. The map is always present; in the non-localized case it contains a single `en` entry.
 
-4. The payload defined in rule 3 is the ONLY data that may appear in a 4xx or 5xx response. Everything else — stack traces, internal request/trace IDs, database IDs, exception types, auxiliary objects — MUST be assumed sensitive and MUST NOT be disclosed.
+4. The payload defined in rule 3 is the ONLY data that may appear in a 4xx or 5xx response. Everything else — stack traces, internal request/trace IDs, database IDs, exception types, auxiliary objects — MUST be assumed sensitive and MUST NOT be disclosed. Two narrow carveouts:
+   - **Mandatory protocol constraints.** When an external protocol the service implements (e.g. OAuth 2.0, MCP) dictates a specific error response shape, that shape supersedes rule 3 for those endpoints.
+   - **Opt-in holistic error contracts.** When the application has explicitly defined a richer client/service contract for a specific error class (e.g. an HTTP 409 conflict that returns the conflicting resource so the client can resolve it), the additional fields are permitted. The opt-in must be explicit and documented; it is not a license to attach ad-hoc context.
 
 5. A component MAY generate an HTTP status code only if it has access to the request context — enough to also populate the stable ID required by rule 3.
 
