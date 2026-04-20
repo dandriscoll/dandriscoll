@@ -158,8 +158,12 @@ cmd_done() {
     _load_state
     if (( $# > 0 )); then
         DISTRACTO_TASK="$*"
-    else
+    elif [[ -n "${DISTRACTO_TASK:-}" ]]; then
         DISTRACTO_TASK=""
+    elif [[ -n "${DISTRACTO_GOAL:-}" ]]; then
+        DISTRACTO_GOAL=""
+    elif [[ -n "${DISTRACTO_PROJECT:-}" ]]; then
+        DISTRACTO_PROJECT=""
     fi
     export DISTRACTO_PROJECT DISTRACTO_GOAL DISTRACTO_TASK
     _save_state
@@ -452,7 +456,7 @@ Usage:
   distracto init                          Setup for current environment
   distracto set -p <proj> -g <goal> -t <task>  Set all values
   distracto update [-p <proj>] [-g <goal>] [-t <task>]  Partial update
-  distracto done [<next task>...]         Clear task (or replace with next)
+  distracto done [<next task>...]         Pop one level: task -> goal -> project (or replace task)
   distracto clear                         Clear all values
   distracto show                          Display current values
   distracto export                        Output values as JSON

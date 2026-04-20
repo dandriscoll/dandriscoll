@@ -158,8 +158,12 @@ function Cmd-Done {
     Load-State
     if ($Arguments.Count -gt 0) {
         $env:DISTRACTO_TASK = ($Arguments -join " ")
-    } else {
+    } elseif ($env:DISTRACTO_TASK) {
         $env:DISTRACTO_TASK = ""
+    } elseif ($env:DISTRACTO_GOAL) {
+        $env:DISTRACTO_GOAL = ""
+    } elseif ($env:DISTRACTO_PROJECT) {
+        $env:DISTRACTO_PROJECT = ""
     }
     Save-State
 }
@@ -312,7 +316,7 @@ Usage:
   distracto init                                    Setup for current environment
   distracto set -p <proj> -g <goal> -t <task>       Set all values
   distracto update [-p <proj>] [-g <goal>] [-t <task>]  Partial update
-  distracto done [<next task>...]                   Clear task (or replace with next)
+  distracto done [<next task>...]                   Pop one level: task -> goal -> project (or replace task)
   distracto clear                                   Clear all values
   distracto show                                    Display current values
   distracto export                                  Output values as JSON
