@@ -7,8 +7,8 @@ links:
   - label: "Website"
     url: "https://twins.la"
     primary: true
-  - label: "Twilio Twin"
-    url: "https://twilio.twins.la"
+  - label: "Twins.la on Github"
+    url: "https://github.com/twins-la/twins-lq"
 icon: "twins-la.png"
 ---
 
