@@ -8,6 +8,8 @@ All signal is in-band text; no harness hooks required.
 Inactive by default.
 - `^PDBG` — activate the behaviors below.
 - `^PDBGOFF` — deactivate and stay silent.
+- `^RELOAD` reloads the prompt stack from disk, inferred from context. It
+  works whether or not diagnostics are active; see Reload below.
 
 ## Load-stamps
 
@@ -44,6 +46,30 @@ Verify persistence by reading it back, never by trusting the write:
 - Same session: re-open the store and echo the nonce.
 - Next session: ask for the latest stored nonce.
 
+## Reload
+
+`^RELOAD` re-reads the prompt stack from disk, in full, and re-applies it.
+Use it after editing a prompt or skill mid-session, or when the agent's
+behavior suggests a loaded file has drifted from what is on disk.
+
+Infer the stack from context; never ask the user which stack they mean. The
+default target is:
+
+- the core prompts and skills currently loaded to handle this conversation
+  (the harness entry point and everything in its mandatory closure), and
+- every file carrying a `pdbg` load-stamp.
+
+When the active stack is narrower, for example a specific skill or mode in
+play, reload that together with the core closure. When the scope is
+ambiguous, prefer over-inclusion: reload the whole stamped closure rather
+than guessing a subset.
+
+Reloading reads the current on-disk copy, so edits made since the file was
+first loaded take effect. After reloading, confirm in one line what was
+refreshed: list the reloaded `pdbg` stamps (the same values a STATUS report
+would show). `^RELOAD` is independent of `^PDBG`: it works whether or not
+diagnostics are active, and it does not change the active or inactive state.
+
 ## Wiring it into a harness
 
 The stamps and behaviors above are inert until one file the harness always
@@ -57,9 +83,10 @@ loads carries the activation instruction and points here. To turn it on:
         ## Prompt debugger
 
         `^PDBG` activates prompt-load diagnostics; `^PDBGOFF` deactivates and
-        stays silent. On activation only, emit a one-time STATUS report near
-        the top of your reply: the `pdbg` load-stamps visible in context, a
-        count (not a list) of feedback records written this session, and any
+        stays silent. `^RELOAD` reloads the prompt stack from disk, inferred
+        from context. On ^PDBG activation only, emit a one-time STATUS report
+        near the top of your reply: the `pdbg` load-stamps visible in context,
+        a count (not a list) of feedback records written this session, and any
         other loaded state not yet surfaced. Full convention:
         [`PROMPT_DEBUGGER.md`](<path\to\PROMPT_DEBUGGER.md>).
 
