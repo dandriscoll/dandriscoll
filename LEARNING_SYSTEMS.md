@@ -135,6 +135,8 @@ Specificity is a property of generalization. The agent **SHOULD** preserve enoug
 
 The level of distillation has its own two-part test: an insight is distilled to the right level when it would have prevented the original incident and would also prevent the next, different instance of the same class. Failing the first means it generalized past its evidence; failing the second means it never left the incident.
 
+When coverage, clarity, and effectiveness pull against each other, they are not equal: clarity and effectiveness are constraints, and coverage is the goal. The agent **SHOULD** generalize an insight as far as it can while a reader can still decide when it applies and the instruction still changes behavior — and no further. Where a flat rule cannot reach the needed coverage within those constraints, use a general rule with conditions (§5.3).
+
 ### 5.3 Variations within an insight
 
 Feedback in a cluster rarely agrees perfectly: a rule can hold in general while certain conditions demand different handling. The agent **SHOULD** express this as one insight — a general rule with explicit conditions for its edge cases — rather than flattening the rule until the edge cases disappear, or scattering sibling insights that each carry a fragment of the rule. Contradictory feedback often marks a missing condition; finding that condition is synthesis working, not failing.
@@ -191,6 +193,8 @@ This document does not require a formal lifecycle, but insights are not fixed. T
 - **MAY** remove an insight when it is obsolete, misleading, unsupported, redundant, too vague, too narrow, or no longer useful.
 
 Removal is not a failure; it is hygiene. A stale insight that contradicts current reality is worse than no insight at all, because agents will act on it.
+
+A recurrence diagnoses the level of generalization. When an incident recurs despite a relevant insight: if the insight was loaded and the incident still happened, it was too vague to change behavior or missing a condition (§5.3); if the incident fell outside the insight's claim, it was too narrow — widen it; if the insight was never loaded, the arrangement (§8) failed, not the insight. The agent **SHOULD** adjust the existing insight in the indicated direction rather than writing a new one beside it.
 
 ### 7.1 Drift control during revision and consolidation
 
