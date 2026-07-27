@@ -1,8 +1,10 @@
 # Learning Systems for LLM Agents
 
-A generalized design for how LLM agents collect, organize, store, maintain, and apply learned **insights** over time.
+A generalized design for how LLM agents receive feedback and organize, store, maintain, and apply learned **insights** over time.
 
-This document defines the management of learning. It does not define the source mechanisms that produce feedback or observations; those are inputs to the system. A brief appendix on feedback sources appears at the end.
+This document defines the management of learning. It does not define the source mechanisms that produce feedback or observations; those are inputs to the learning system. A brief appendix on feedback sources appears at the end.
+
+The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in RFC 2119.
 
 ---
 
@@ -14,7 +16,7 @@ A learning system exists to help agents:
 - Improve future performance.
 - Preserve useful learning across work, across sessions, and across time.
 
-A learning system **MUST NOT** be used as a substitute for remediation. If feedback reveals an existing error, defect, missed requirement, bad output, or broken artifact, that problem **MUST** be fixed or routed to whoever can fix it. The learning system **MAY** capture an insight to prevent recurrence, but capturing an insight does not discharge the obligation to correct the current problem.
+A learning system **MUST NOT** be used as a substitute for remediation. If feedback reveals an existing error, defect, missed requirement, bad output, or broken artifact, that problem **MUST** be fixed or routed to whoever can fix it. The agent **MAY** capture an insight to prevent recurrence, but capturing an insight does not discharge the obligation to correct the current problem.
 
 A learning system **SHOULD** be evaluated by whether agents using it behave better over time — not by the volume of insights it accumulates.
 
@@ -31,6 +33,7 @@ An insight **MUST**:
 - Be written so a future reader can apply it without re-reading the original feedback.
 - Carry enough context (when, where, why) to be operationally useful.
 - Express guidance, not raw observation.
+- Be as compact as possible while still producing the desired effect. Explanations and restatements that do not change behavior are excess; context that gates when the insight applies is not.
 
 An insight **MUST NOT** merely restate feedback. Feedback says *what happened*; an insight says *what to do differently or keep doing*. Synthesis is required to cross that gap.
 
@@ -38,9 +41,11 @@ An insight **SHOULD** be specific enough to act on and general enough to apply m
 
 ### 2.2 Reference
 
-A **reference** is a source material that led to an insight: feedback text, a transcript excerpt, a review comment, an observation, an incident record, an example, or any other supporting evidence.
+A **reference** is source material that led to an insight: feedback text, a transcript excerpt, a review comment, an observation, an incident record, an example, or any other supporting evidence.
 
-The system **MUST** keep insights separate from their references. Insights are the operational artifact agents read and apply. References are the evidentiary record behind them.
+Feedback is logged as it arrives. When an insight is formed, references are created back to the feedback (or other evidence) that produced it: logged material becomes a reference when an insight cites it.
+
+The learning system **MUST** keep insights separate from their references. Insights are the operational artifact agents read and apply. References are the evidentiary record behind them.
 
 References serve two purposes:
 
@@ -48,6 +53,12 @@ References serve two purposes:
 2. **Faithful revision** — when an insight is generalized, reconstituted, consolidated, or otherwise changed, the change can be checked against the originating evidence so the revised insight has not drifted away from what was actually observed.
 
 Every durable insight **SHOULD** be traceable to at least one reference. An insight with no traceable evidence **MAY** still exist, but it **SHOULD** be marked as such so a future agent can weigh it accordingly.
+
+### 2.3 Granularity
+
+The learning system distills. An agent performs many actions: outputs, documents, decisions. Feedback distills those actions — sampling and generalizing rather than recording each one. Insights distill feedback the same way, concentrating many records into few rules.
+
+Neither step is 1:1. The agent **MUST NOT** convert feedback item-for-item into insights: a learning system that does so accumulates restatements rather than learning. The synthesis requirements in §5 enforce this distillation.
 
 ---
 
@@ -62,7 +73,7 @@ Examples of scopes (illustrative, not exhaustive):
 - Person-specific scope.
 - Organization, team, domain, or workflow scope.
 
-The system **MUST NOT** impose a fixed universal list of scopes. Environments and use cases vary, and the set of meaningful scopes varies with them. The system **MUST** support storing insights at the appropriate scope for the environment in which it operates.
+The learning system **MUST NOT** impose a fixed universal list of scopes. Environments and use cases vary, and the set of meaningful scopes varies with them. The learning system **MUST** support storing insights at the appropriate scope for the environment in which it operates.
 
 Different scopes **MAY** use different storage locations. For example:
 
@@ -78,7 +89,7 @@ When storing an insight, the agent **MUST** decide the appropriate scope based o
 - Expected reuse across contexts.
 - The exposure characteristics of available storage locations (see §4).
 
-The agent **SHOULD** make its best judgment from these factors. If the correct scope is genuinely unclear and the choice has meaningful consequences, the agent **MAY** ask for clarification. The agent **SHOULD NOT** overuse clarification when the scope is reasonably inferable.
+The agent **SHOULD** make its best judgment from these factors. When the uncertainty is about exposure, the agent **SHOULD NOT** ask; it **SHOULD** default to the more restricted location (see §4). For other scope uncertainty, if the correct scope is genuinely unclear and the choice has meaningful consequences, the agent **MAY** ask for clarification. The agent **SHOULD NOT** overuse clarification when the scope is reasonably inferable.
 
 ---
 
@@ -100,9 +111,9 @@ When exposure is uncertain, the agent **SHOULD** default to the more restricted 
 
 ---
 
-## 5. Synthesis of insights
+## 5. Synthesizing insights
 
-After feedback and observations are collected and organized, the agent **MUST** synthesize them into insights. Synthesis is what turns raw material into reusable guidance.
+The agent **MUST** synthesize logged feedback and observations into insights. Synthesis is what turns raw material into reusable guidance. The obligation is to run synthesis, not to promote everything: leaving material as a reference or a candidate insight (see §5.4) is a legitimate outcome of synthesis.
 
 Synthesis includes:
 
@@ -112,25 +123,39 @@ Synthesis includes:
 
 The goal is a set of insights that is **appropriately generalized**: neither a pile of overly specific one-off corrections nor a set of vague principles too abstract to act on.
 
-### 5.1 Specificity control
+### 5.1 Clustering
+
+The agent **SHOULD** cluster feedback by the behavior it would change, not by surface similarity — arriving on the same day, touching the same file, or sharing wording does not make feedback related. A cluster is the unit of synthesis: it usually yields one insight, and yields none while its evidence is still too thin (see §5.4).
+
+New feedback that fits an existing insight's class belongs to that insight's cluster. The agent **SHOULD** revise or reconfirm the existing insight rather than writing a sibling; parallel insights covering the same behavior are duplication that consolidation must later undo.
+
+### 5.2 Specificity control
 
 Specificity is a property of generalization. The agent **SHOULD** preserve enough context for the insight to be useful while removing incidental details that do not matter for future application. The test is operational: can a future agent, reading the insight cold, decide whether and how to apply it?
 
-### 5.2 Avoiding overfitting
+The level of distillation has its own two-part test: an insight is distilled to the right level when it would have prevented the original incident and would also prevent the next, different instance of the same class. Failing the first means it generalized past its evidence; failing the second means it never left the incident.
+
+### 5.3 Variations within an insight
+
+Feedback in a cluster rarely agrees perfectly: a rule can hold in general while certain conditions demand different handling. The agent **SHOULD** express this as one insight — a general rule with explicit conditions for its edge cases — rather than flattening the rule until the edge cases disappear, or scattering sibling insights that each carry a fragment of the rule. Contradictory feedback often marks a missing condition; finding that condition is synthesis working, not failing.
+
+Conditions face the same compactness bar as the rest of the insight (§2.1): a condition earns its place only when it changes behavior. When conditions multiply until no general rule remains, the cluster holds more than one class — split it into separate insights.
+
+### 5.4 Avoiding overfitting
 
 A single correction **MUST NOT** automatically become a universal rule. The evidence must support the generalization.
 
-Where evidence is insufficient to support a durable insight, the system **MAY**:
+Where evidence is insufficient to support a durable insight, the agent **MAY**:
 
 - Preserve the feedback as a reference.
-- Record it as a provisional observation or candidate insight.
+- Record it as a candidate insight.
 - Defer promotion until more evidence accumulates or a clear pattern emerges.
 
-A provisional observation is not a weakness; it is an honest representation of partial evidence. Promoting too eagerly produces a learning system full of brittle rules.
+A candidate insight is not a weakness; it is an honest representation of partial evidence. Promoting too eagerly produces a learning system full of brittle rules.
 
-### 5.3 Faithfulness to references
+### 5.5 Faithfulness to references
 
-When synthesizing, the agent **MUST** stay faithful to the underlying references. After generalization, the resulting insight **SHOULD** be checked back against its references to confirm it still describes what actually happened.
+When synthesizing, the agent **MUST** stay faithful to the underlying references. After generalization, the resulting insight **MUST** be checked back against its references to confirm it still describes what actually happened.
 
 ---
 
@@ -144,7 +169,7 @@ The learning system **MUST** have a clear, concise, and consistent way of managi
 - Updates, revisions, consolidations, and removals.
 - Links between insights and the references that support them.
 
-The system **SHOULD NOT** over-specify a storage schema. Different environments will need different formats, file layouts, or backing stores. What matters is that the bookkeeping is consistent enough that a future agent can:
+This document does not prescribe a storage schema. Different environments will need different formats, file layouts, or backing stores. What matters is that the bookkeeping is consistent enough that a future agent can:
 
 - Find relevant insights.
 - Inspect the references behind them.
@@ -157,13 +182,13 @@ Trust is the operative property. An inconsistent or unreliable bookkeeping layer
 
 ## 7. Maintaining insight quality
 
-Insights **MUST** be kept relevant, trustworthy, and useful over time.
+An insight is good when it is relevant, trustworthy, and useful. Whether the stored insights stay that way over time determines whether future agents can act on them safely.
 
-The system does not require a formal lifecycle, but it **SHOULD** recognize that insights:
+This document does not require a formal lifecycle, but insights are not fixed. The agent:
 
-- **MAY** be revised when better understanding or new evidence emerges.
-- **MAY** be consolidated into a broader or better insight.
-- **MAY** be removed when obsolete, misleading, unsupported, redundant, too vague, too narrow, or no longer useful.
+- **MAY** revise an insight when better understanding or new evidence emerges.
+- **MAY** consolidate insights into a broader or better insight.
+- **MAY** remove an insight when it is obsolete, misleading, unsupported, redundant, too vague, too narrow, or no longer useful.
 
 Removal is not a failure; it is hygiene. A stale insight that contradicts current reality is worse than no insight at all, because agents will act on it.
 
@@ -178,7 +203,19 @@ When an insight is revised or consolidated, the agent **MUST** compare the resul
 
 ---
 
-## 8. Application of insights
+## 8. Output artifacts
+
+The learning system is judged at the point of reading. Whatever form its outputs take — insight files, or edits to the skills, prompts, and instructions that govern behavior — the agent **MUST** produce artifacts that are effective and efficient at helping a future reader adhere to the insights, not merely at archiving them.
+
+Three consequences:
+
+- **Absorb insights into the artifact that produced the feedback.** When feedback traces to an instruction, skill, or prompt, the most effective output is often an edit to that artifact itself. The agent **SHOULD** apply the change there rather than recording a separate insight that says what the artifact should have said; the separate record is a second copy to load and a second copy to maintain. Traceability (§2.2) still applies to the absorbed change. Where no such artifact exists, or the artifact cannot be edited, the agent records an insight instead. Where the feedback applies significantly beyond the artifact, the agent **MAY** record an insight in addition to the edit — but only when the artifact is narrowly scoped and there are many foreseeable scenarios outside it where the insight would apply.
+- **Arrange insights so a reader knows when to load them.** Group them by the context in which they fire — a scope (§3), a task, a tool — and make that context legible without reading the insights themselves; the arrangement exists so the right set is found at the moment it applies.
+- **Keep every loadable set compact and focused.** A set **MUST** stay compact enough to be internalized whole: each insight in it spends the reader's attention and dilutes the others. This is also why removal (§7) matters: an obsolete insight in a loaded set costs the same attention as a current one.
+
+---
+
+## 9. Application of insights
 
 A learning system is only useful if agents actually consult and apply relevant insights during future work. An insight that is never read is indistinguishable from one that does not exist.
 
@@ -219,8 +256,6 @@ Not all feedback is equally important. Broad capture is useful, but depth of tre
 - Preserve enough context for feedback to be interpretable later.
 - Distinguish raw feedback from inferred meaning. Keep both; do not let inference overwrite the original.
 - Do not prematurely convert feedback into durable insights.
-- Treat human feedback as directionally important.
-- Treat reflective feedback as operationally important.
 - Cluster related feedback before generalizing, when possible.
 - Preserve contradictory feedback rather than forcing false consistency; contradictions often mark a missing distinction.
 - Respect exposure control for all feedback and references, not just for finished insights.
