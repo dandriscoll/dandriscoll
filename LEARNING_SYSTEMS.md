@@ -1,4 +1,4 @@
-# Learning Systems for LLM Agents
+# Learning systems for LLM agents
 
 A generalized design for how LLM agents receive feedback and organize, store, maintain, and apply learned **insights** over time.
 
@@ -236,7 +236,7 @@ Feedback is the primary raw material that flows into the learning system. This a
 ### A.1 Three sources of feedback
 
 1. **Explicit feedback**
-   Direct feedback intentionally given to the agent or system: corrections, comments, evaluations, reviews, acceptance or rejection signals, bug reports, stated preferences.
+   Direct feedback intentionally given to the agent: corrections, comments, evaluations, reviews, acceptance or rejection signals, bug reports, stated preferences.
 
 2. **Implicit feedback**
    Guidance revealed during the course of work: steering, edits to the agent's output, repeated clarifications, overridden assumptions, observed constraints, and patterns in what humans accept, reject, or redirect.
